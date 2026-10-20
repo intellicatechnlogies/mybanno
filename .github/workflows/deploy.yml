@@ -152,7 +152,7 @@ jobs:
             ExecStart=$VENV_DIR/bin/gunicorn \
             --workers 3 \
             --bind unix:/run/gunicorn/gunicorn.sock \
-            mybanno.wsgi:application
+            cloths_project.wsgi:application
 
             Restart=always
 
