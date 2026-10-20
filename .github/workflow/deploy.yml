@@ -1,85 +1,206 @@
-name: Django CI/CD Pipeline
+deploy:
+  runs-on: ubuntu-latest
+  if: github.event_name == 'push'
+  needs: build
 
-on:
-  pull_request:
-    branches: ["main"]   # Run tests when a PR targets main
-  push:
-    branches: ["main"]   # Run build+test+deploy when code is merged/pushed to main
+  environment:
+    name: production
+    #url: https://visitgayaji.com
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+  steps:
+    - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    - name: Deploy to GCP VM
+      uses: appleboy/ssh-action@v0.1.10
 
-      - name: Run tests
-        run: |
-          pip install -r requirements.txt
-          python manage.py test
+      with:
+        host: ${{ secrets.GCP_VM_IP }}
+        username: ${{ secrets.GCP_VM_USER }}
+        key: ${{ secrets.GCP_SSH_KEY }}
 
-  build:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'   # Only run on merge/push
-    needs: test                       # Ensure tests pass first
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+        script: |
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+          PROJECT_DIR=/home/raumi/Mybanno
+          VENV_DIR=$PROJECT_DIR/venv
+          REPO_URL=https://github.com/intellicatechnlogies/mybanno.git
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+          echo "===== INSTALL PACKAGES ====="
 
-  deploy:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'   # Only run on merge/push
-    needs: build                      # Ensure build succeeds first
-    environment:
-      name: production                # Requires approval before running
-      #url: https://intellicatechnology.com
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+          sudo apt-get update -y
 
-      - name: Deploy to GCP VM
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.GCP_VM_IP }}
-          username: ${{ secrets.GCP_VM_USER }}
-          key: ${{ secrets.GCP_SSH_KEY }}
-          script: |
-            PROJECT_DIR=/home/raumi/Mybanno
-            VENV_DIR=$PROJECT_DIR/venv
+          sudo apt-get install -y \
+          python3-pip \
+          python3-venv \
+          python3-dev \
+          build-essential \
+          git \
+          nginx \
+          certbot \
+          python3-certbot-nginx
+
+          echo "===== CREATE PROJECT DIRECTORY ====="
+
+          mkdir -p $PROJECT_DIR
+
+          echo "===== CLONE OR UPDATE REPO ====="
+
+          if [ ! -d "$PROJECT_DIR/.git" ]; then
+
+            rm -rf $PROJECT_DIR/*
+
+            git clone $REPO_URL $PROJECT_DIR
+
+          else
 
             cd $PROJECT_DIR
-            source $VENV_DIR/bin/activate
 
-            git pull origin main
-            pip install -r requirements.txt
-            python manage.py migrate
-            python manage.py collectstatic --noinput
+            git add .
 
-            sudo chown -R raumi:www-data $PROJECT_DIR
-            sudo chmod -R 755 $PROJECT_DIR/staticfiles
+            git commit -m "Server backup before deployment" || true
 
-            sudo mkdir -p /run/gunicorn
-            sudo chown raumi:www-data /run/gunicorn
+            git fetch origin main
 
-            sudo systemctl daemon-reload
-            sudo systemctl enable gunicorn
-            sudo systemctl restart gunicorn
+            git reset --hard origin/main
 
-            sudo nginx -t
-            sudo systemctl reload nginx
+          fi
 
-            # sudo certbot --nginx -d intellicatechnology.com -d www.intellicatechnology.com --non-interactive --agree-tos -m sales@intellicatechnology.com --force-renewal
+          cd $PROJECT_DIR
+
+          echo "===== CREATE FOLDERS ====="
+
+          mkdir -p static
+          mkdir -p staticfiles
+          mkdir -p media
+          mkdir -p logs
+
+          echo "===== CREATE VENV ====="
+
+          if [ ! -d "$VENV_DIR" ]; then
+              python3 -m venv $VENV_DIR
+          fi
+
+          source $VENV_DIR/bin/activate
+
+          echo "===== INSTALL REQUIREMENTS ====="
+
+          pip install --upgrade pip
+
+          pip install -r requirements.txt
+
+          pip install gunicorn
+
+          echo "===== ENV FILE ====="
+
+          if [ ! -f ".env" ]; then
+             touch .env
+          fi
+
+          echo "===== DJANGO MIGRATIONS ====="
+
+          python manage.py migrate --noinput
+
+          python manage.py collectstatic --noinput
+
+          echo "===== FIX PERMISSIONS ====="
+
+          sudo chmod 755 /home
+          sudo chmod 755 /home/raumi
+          sudo chmod 755 $PROJECT_DIR
+
+          sudo chown -R raumi:www-data $PROJECT_DIR
+
+          sudo chmod -R 755 $PROJECT_DIR
+
+          echo "===== GUNICORN SOCKET ====="
+
+          sudo mkdir -p /run/gunicorn
+
+          sudo chown raumi:www-data /run/gunicorn
+
+          echo "===== CREATE GUNICORN SERVICE ====="
+
+          sudo tee /etc/systemd/system/gunicorn.service > /dev/null << EOF
+          [Unit]
+          Description=Gunicorn Service
+          After=network.target
+
+          [Service]
+          User=raumi
+          Group=www-data
+          WorkingDirectory=$PROJECT_DIR
+
+          ExecStart=$VENV_DIR/bin/gunicorn \
+          --workers 3 \
+          --bind unix:/run/gunicorn/gunicorn.sock \
+          cloths_project.wsgi:application
+
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          sudo systemctl daemon-reload
+
+          sudo systemctl enable gunicorn
+
+          sudo systemctl restart gunicorn
+
+          echo "===== NGINX CONFIG ====="
+
+          sudo tee /etc/nginx/sites-available/cloths > /dev/null << EOF
+
+          server {
+
+              listen 80;
+
+              server_name visitgayaji.com www.visitgayaji.com;
+
+              location /static/ {
+                  alias $PROJECT_DIR/staticfiles/;
+              }
+
+              location /media/ {
+                  alias $PROJECT_DIR/media/;
+              }
+
+              location / {
+
+                  include proxy_params;
+
+                  proxy_pass http://unix:/run/gunicorn/gunicorn.sock;
+              }
+          }
+
+          EOF
+
+          sudo ln -sf \
+          /etc/nginx/sites-available/cloths \
+          /etc/nginx/sites-enabled/
+
+          sudo rm -f /etc/nginx/sites-enabled/default
+
+          sudo nginx -t
+
+          sudo systemctl restart nginx
+
+          echo "===== SSL ====="
+
+          # sudo certbot --nginx \
+          # -d visitgayaji.com \
+          # -d www.visitgayaji.com \
+          # --non-interactive \
+          # --agree-tos \
+          # -m sales@intellicatechnology.com || true
+
+          echo "===== RESTART SERVICES ====="
+
+          sudo systemctl restart gunicorn
+
+          sudo systemctl restart nginx
+
+          echo "===== LOGS ====="
+
+          sudo journalctl -u gunicorn -n 50 --no-pager
+
+          sudo tail -n 50 /var/log/nginx/error.log
