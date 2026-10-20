@@ -130,13 +130,22 @@ jobs:
             python manage.py migrate --noinput
 
             python manage.py collectstatic --noinput
-
+            
             sudo chown -R raumi:www-data $PROJECT_DIR
-
+            
             sudo chmod -R 755 $PROJECT_DIR
-
+            
+            sudo chmod 755 /home
+            sudo chmod 755 /home/raumi
+            sudo chmod 755 /home/raumi/Mybanno
+            
+            sudo chown -R raumi:www-data /home/raumi/Mybanno
+            
+            sudo find /home/raumi/Mybanno/staticfiles -type d -exec chmod 755 {} \;
+            sudo find /home/raumi/Mybanno/staticfiles -type f -exec chmod 644 {} \;
+            
             sudo mkdir -p /run/gunicorn
-
+            
             sudo chown raumi:www-data /run/gunicorn
 
             sudo tee /etc/systemd/system/gunicorn.service > /dev/null << EOF
