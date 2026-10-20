@@ -1,0 +1,85 @@
+name: Django CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: ["main"]   # Run tests when a PR targets main
+  push:
+    branches: ["main"]   # Run build+test+deploy when code is merged/pushed to main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Run tests
+        run: |
+          pip install -r requirements.txt
+          python manage.py test
+
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'   # Only run on merge/push
+    needs: test                       # Ensure tests pass first
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'   # Only run on merge/push
+    needs: build                      # Ensure build succeeds first
+    environment:
+      name: production                # Requires approval before running
+      #url: https://intellicatechnology.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_VM_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            PROJECT_DIR=/home/raumi/Mybanno
+            VENV_DIR=$PROJECT_DIR/venv
+
+            cd $PROJECT_DIR
+            source $VENV_DIR/bin/activate
+
+            git pull origin main
+            pip install -r requirements.txt
+            python manage.py migrate
+            python manage.py collectstatic --noinput
+
+            sudo chown -R raumi:www-data $PROJECT_DIR
+            sudo chmod -R 755 $PROJECT_DIR/staticfiles
+
+            sudo mkdir -p /run/gunicorn
+            sudo chown raumi:www-data /run/gunicorn
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable gunicorn
+            sudo systemctl restart gunicorn
+
+            sudo nginx -t
+            sudo systemctl reload nginx
+
+            # sudo certbot --nginx -d intellicatechnology.com -d www.intellicatechnology.com --non-interactive --agree-tos -m sales@intellicatechnology.com --force-renewal
