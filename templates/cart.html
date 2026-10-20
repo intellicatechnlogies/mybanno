@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Your cart · Mybanno{% endblock %}
+{% block content %}
+<div class="container cart-page">
+  <span class="eyebrow">Your selection</span>
+  <h1>Your cart</h1>
+  {% if items %}
+    <div class="cart-layout">
+      <div class="cart-items">
+        {% for item in items %}
+        <article class="cart-item">
+          {% if item.media %}
+            {% if item.media.media_type == 'video' %}<video src="{{ item.media.data_url }}" muted preload="metadata"></video>{% else %}<img src="{{ item.media.data_url }}" alt="{{ item.product.name }}">{% endif %}
+          {% else %}<div class="cart-item-placeholder">Mybanno</div>{% endif %}
+          <div class="cart-item-details">
+            <h2>{{ item.product.name }}</h2>
+            <p>{{ item.product.category }} · {{ item.product.cloth_type }}</p>
+            {% if item.color %}<p class="cart-color"><i style="--swatch:{{ item.color_code }}" aria-hidden="true"></i> Color: {{ item.color }}</p>{% endif %}
+            {% if item.size %}<p>Size: {{ item.size }}</p>{% endif %}
+            <p>{{ item.unit_price|floatformat:2 }} each</p>
+            <form method="post" class="cart-quantity-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update">
+              <input type="hidden" name="key" value="{{ item.key }}">
+              <label for="quantity-{{ forloop.counter }}">Quantity</label>
+              <input id="quantity-{{ forloop.counter }}" type="number" name="quantity" min="1" max="{{ item.max_quantity }}" value="{{ item.quantity }}" required>
+              <button class="small-button" type="submit">Update</button>
+            </form>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="key" value="{{ item.key }}">
+              <button class="cart-remove" type="submit">Remove</button>
+            </form>
+          </div>
+          <strong class="cart-line-total">{{ item.line_total|floatformat:2 }}</strong>
+        </article>
+        {% endfor %}
+      </div>
+      <aside class="cart-summary">
+        <h2>Order summary</h2>
+        <p><span>Subtotal</span><strong>{{ subtotal|floatformat:2 }}</strong></p>
+        <p class="count">Payment is not collected online at checkout.</p>
+        <a class="button cart-checkout-button" href="{% url 'checkout' %}">Checkout</a>
+        <a class="button" href="{% url 'index' %}#collection">Continue shopping</a>
+      </aside>
+    </div>
+  {% else %}
+    <div class="empty cart-empty"><h2>Your cart is empty</h2><p>Choose a product from the collection to add it here.</p><a class="button" href="{% url 'index' %}#collection">Browse products</a></div>
+  {% endif %}
+</div>
+{% endblock %}

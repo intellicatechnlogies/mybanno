@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Shop · Mybanno{% endblock %}
+{% block content %}
+<div class="shop-page">
+<section class="hero"><div class="container hero-inner"><div class="hero-copy"><span class="eyebrow">The new everyday edit</span><h1>Clothes that feel like you.</h1><p>Thoughtfully chosen fabrics, relaxed silhouettes, and little details that make getting dressed feel effortless.</p><div class="hero-actions"><a class="button" href="#collection">Explore the collection</a><span class="hero-note">Made for slow mornings &amp; busy days</span></div></div><div class="hero-art" aria-hidden="true"><span>Wear<br>your<br>story</span></div></div></section>
+<div class="container collection-container">
+  <p id="storefront-notice" class="storefront-notice" role="status" aria-live="polite" hidden></p>
+  {% if sale_active %}<div class="sale-banner"><strong>Sale is going on</strong><span>Limited-time offers are available on selected pieces.</span></div>{% endif %}
+  <div class="section-heading" id="collection"><div><span class="eyebrow">Find your next favourite</span><h2>Our collection</h2><p class="collection-intro">Easy layers, expressive details, and everyday pieces chosen to stay in your rotation.</p></div><span class="count">{{ products|length }} item{% if products|length != 1 %}s{% endif %}</span></div>
+  <div class="product-grid" id="product-grid">
+    {% include '_product_cards.html' %}
+    {% if not products %}<div class="empty"><h3>No pieces found</h3><p>Try a different search or clear your filters.</p></div>{% endif %}
+  </div>
+  <div id="product-loader" class="product-loader{% if not has_more %} is-hidden{% endif %}" data-offset="{{ products|length }}" data-batch-size="5" data-more-url="{% url 'more_products' %}" data-has-more="{% if has_more %}1{% else %}0{% endif %}" aria-live="polite">Loading more products…</div>
+  <section class="closing-banner"><div><span class="eyebrow">A wardrobe, not a trend</span><h2>Find pieces that stay in rotation.</h2><p>From first coffee to last light, discover easy layers made to move with you.</p></div><a class="secondary" href="#collection">Browse all pieces <span aria-hidden="true">→</span></a></section>
+</div>
+</div>
+<dialog class="product-modal" id="product-modal" aria-labelledby="modal-product-name">
+  <div class="product-modal-content">
+    <button class="product-modal-close" type="button" aria-label="Close product details">&times;</button>
+    <div class="product-modal-gallery">
+      <div class="product-modal-media-frame">
+        <img class="product-modal-image" alt="" role="button" tabindex="0" aria-label="Enlarge product photo" hidden>
+        <video class="product-modal-video" controls playsinline preload="metadata" hidden></video>
+        <div class="product-modal-placeholder">Mybanno</div>
+        <button class="product-modal-arrow product-modal-previous" type="button" data-modal-step="-1" aria-label="Previous photo or video" hidden>&lt;</button>
+        <button class="product-modal-arrow product-modal-next" type="button" data-modal-step="1" aria-label="Next photo or video" hidden>&gt;</button>
+      </div>
+      <p class="product-modal-position" aria-live="polite" hidden></p>
+    </div>
+    <div class="product-modal-info">
+      <div class="product-modal-info-scroll">
+        <p class="product-modal-status" role="status" aria-live="polite"></p>
+        <span class="eyebrow product-modal-category"></span>
+        <h2 id="modal-product-name"></h2>
+        <div class="product-modal-prices"></div>
+        <p class="product-modal-stock"></p>
+        <div class="product-modal-description"><h3>About this product</h3><p></p></div>
+      </div>
+      <form class="product-modal-cart-form" data-add-url="{% url 'cart_add' %}">
+        {% csrf_token %}
+        <input type="hidden" name="product_id">
+        <div class="product-modal-colors" hidden><span class="product-modal-color-label">Choose a color</span><input id="product-modal-color" name="color" type="hidden"><div class="product-color-swatches" role="group" aria-label="Available colors"></div><span class="selected-color-name" aria-live="polite" hidden><i class="selected-color-indicator" aria-hidden="true"></i><span class="selected-color-text"></span></span><span class="product-modal-color-prompt" role="status" aria-live="polite" hidden>Please select a color first to choose a size.</span></div>
+        <div class="product-modal-sizes" hidden><label for="product-modal-size">Available size</label><select id="product-modal-size" class="product-modal-size" name="size" required></select></div>
+        <label for="product-modal-quantity">Quantity</label>
+        <input id="product-modal-quantity" type="number" name="quantity" min="1" value="1" required>
+        <button class="button" type="submit">Add to cart</button>
+      </form>
+    </div>
+  </div>
+</dialog>
+<dialog class="product-image-lightbox" aria-label="Full product image">
+  <button class="product-image-lightbox-close" type="button" aria-label="Close full image">&times;</button>
+  <img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
+</dialog>
+{% load static %}
+<script src="{% static 'storefront.js' %}?v=17" defer></script>
+{% endblock %}

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Mybanno{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  {% load static %}
+  <link rel="icon" type="image/png" href="{% static 'mibanno-logo-white.png' %}?v=2">
+  <link rel="apple-touch-icon" href="{% static 'mibanno-logo-white.png' %}?v=2">
+  <link rel="stylesheet" href="{% static 'style.css' %}?v=31">
+  <script src="{% static 'header-filters.js' %}?v=2" defer></script>
+  <script src="{% static 'admin-idle.js' %}?v=2" defer></script>
+</head>
+<body data-admin-session="{% if request.session.admin_id %}1{% else %}0{% endif %}" data-admin-logout-url="{% url 'admin_logout' %}">
+  <header class="site-header">
+    <div class="container nav-wrap">
+      <a class="brand" href="{% url 'index' %}" aria-label="Mybanno home"><img src="{% static 'mibanno-logo-white.png' %}?v=2" alt="Mybanno"></a>
+      <form class="header-search" method="get" action="{% url 'index' %}">
+        <label class="sr-only" for="header-query">Search the collection</label>
+        <input id="header-query" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search the collection…">
+        <details class="header-filter">
+          <summary>Filter{% if request.GET.category or request.GET.cloth_type or request.GET.occasion or request.GET.size or request.GET.offer == '1' or request.GET.min_price or request.GET.max_price or request.GET.sort == 'price_low' or request.GET.sort == 'price_high' or request.GET.sort == 'name' %}<span class="filter-dot" aria-label="Filters active"></span>{% endif %}</summary>
+          <div class="filter-menu">
+            <label for="header-category">Category</label>
+            <select id="header-category" name="category">
+              <option value="">All categories</option>
+              {% for category in header_categories %}
+                <option value="{{ category }}" {% if request.GET.category == category %}selected{% endif %}>{{ category }}</option>
+              {% endfor %}
+            </select>
+            <label for="header-cloth-type">Cloth type</label>
+            <select id="header-cloth-type" name="cloth_type">
+              <option value="">All cloth types</option>
+              {% for cloth_type in header_cloth_types %}
+                <option value="{{ cloth_type }}" {% if request.GET.cloth_type == cloth_type %}selected{% endif %}>{{ cloth_type }}</option>
+              {% endfor %}
+            </select>
+            <label for="header-occasion">Occasion</label>
+            <select id="header-occasion" name="occasion">
+              <option value="">All occasions</option>
+              {% for occasion in header_occasions %}
+                <option value="{{ occasion }}" {% if request.GET.occasion == occasion %}selected{% endif %}>{{ occasion }}</option>
+              {% endfor %}
+            </select>
+            <label for="header-size">Size</label>
+            <select id="header-size" name="size">
+              <option value="">Any size</option>
+              {% for size in header_sizes %}
+                <option value="{{ size }}" {% if request.GET.size == size %}selected{% endif %}>{{ size }}</option>
+              {% endfor %}
+            </select>
+            <label for="header-offer">Sale</label>
+            <select id="header-offer" name="offer">
+              <option value="">All products</option>
+              <option value="1" {% if request.GET.offer == '1' %}selected{% endif %}>Sale</option>
+            </select>
+            <div class="filter-price">
+              <div class="price-slider" aria-label="Price range slider">
+                <input id="header-min-range" type="range" min="0" max="{{ header_price_max }}" value="{{ request.GET.min_price|default:0 }}" aria-label="Minimum price slider">
+                <input id="header-max-range" type="range" min="0" max="{{ header_price_max }}" value="{{ request.GET.max_price|default:header_price_max }}" aria-label="Maximum price slider">
+              </div>
+              <label for="header-min-price">Min price</label>
+              <label for="header-max-price">Max price</label>
+              <input id="header-min-price" name="min_price" value="{{ request.GET.min_price|default:'' }}" type="number" min="0" step="0.01" placeholder="0">
+              <input id="header-max-price" name="max_price" value="{{ request.GET.max_price|default:'' }}" type="number" min="0" step="0.01" placeholder="Any">
+            </div>
+            <label for="header-sort">Sort by</label>
+            <select id="header-sort" name="sort">
+              <option value="newest" {% if not request.GET.sort or request.GET.sort == 'newest' %}selected{% endif %}>Newest first</option>
+              <option value="price_low" {% if request.GET.sort == 'price_low' %}selected{% endif %}>Price: low to high</option>
+              <option value="price_high" {% if request.GET.sort == 'price_high' %}selected{% endif %}>Price: high to low</option>
+              <option value="name" {% if request.GET.sort == 'name' %}selected{% endif %}>Name</option>
+            </select>
+            <div class="filter-actions"><a href="{% url 'index' %}">Clear</a><button type="submit">Apply filters</button></div>
+          </div>
+        </details>
+        <button type="submit" aria-label="Search and filter">Search</button>
+      </form>
+      <nav>
+        <a href="{% url 'index' %}">Shop</a>
+        <a href="{% url 'index' %}?offer=1#collection">Sale</a>
+        <a href="{% url 'cart' %}">Cart <span class="cart-count" data-cart-count>{{ cart_count }}</span></a>
+        {% if request.session.admin_id %}
+          <a href="{% url 'admin_dashboard' %}">Admin dashboard</a>
+          <a href="{% url 'admin_orders' %}">Orders</a>
+          <a class="nav-button" href="{% url 'admin_logout' %}">Log out</a>
+        {% else %}
+          <a class="nav-button" href="{% url 'admin_login' %}">Admin login</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% if messages %}<div class="container flash-stack">{% for message in messages %}<div class="flash {% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer><div class="container">Thoughtfully made, comfortably worn. &copy; {{ 2026 }} Mybanno.</div></footer>
+</body>
+</html>

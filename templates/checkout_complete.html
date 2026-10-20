@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Order placed · Mybanno{% endblock %}
+{% block content %}
+<div class="container checkout-page">
+  <section class="checkout-success">
+    <span class="eyebrow">Order received</span>
+    <h1>Thank you for your order</h1>
+    <p>Your order number is <strong>#{{ order.pk }}</strong>.</p>
+    <p>We saved your delivery details and order items. Payment is not collected online.</p>
+    <div class="checkout-success-summary">
+      {% for item in order.items.all %}
+      <p>{% if item.color %}<span class="order-color-label"><i style="--swatch:{{ item.color_code }}" aria-hidden="true"></i> {{ item.color }}</span> · {% endif %}{{ item.product_name }}{% if item.size %} · {{ item.size }}{% endif %} × {{ item.quantity }} <strong>{{ item.unit_price|floatformat:2 }}</strong></p>
+      {% endfor %}
+      <p class="checkout-total">Subtotal <strong>{{ order.subtotal|floatformat:2 }}</strong></p>
+    </div>
+    <a class="button" href="{% url 'index' %}#collection">Continue shopping</a>
+  </section>
+</div>
+{% endblock %}

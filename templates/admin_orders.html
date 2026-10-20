@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Customer orders · Mybanno{% endblock %}
+{% block content %}
+<section class="container admin-orders">
+  <div class="admin-toolbar">
+    <div>
+      <span class="eyebrow">Shop management</span>
+      <h1>Customer orders</h1>
+      <p class="admin-orders-intro">{{ page.paginator.count }} order{% if page.paginator.count != 1 %}s{% endif %}</p>
+    </div>
+    <a class="secondary" href="{% url 'admin_dashboard' %}">Back to products</a>
+  </div>
+
+  <form method="get" class="order-filter">
+    <label for="order-status-filter">Filter by status</label>
+    <select id="order-status-filter" name="status">
+      <option value="">All statuses</option>
+      {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button class="small-button" type="submit">Apply filter</button>
+    {% if status_filter %}<a href="{% url 'admin_orders' %}">Clear</a>{% endif %}
+  </form>
+
+  {% if page.object_list %}
+    <div class="table-wrap">
+      <table class="admin-table order-table">
+        <thead>
+          <tr>
+            <th>Order / Date</th>
+            <th>Customer / Delivery</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Remarks</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in page.object_list %}
+            <tr>
+              <td>
+                <strong>#{{ order.pk }}</strong><br>
+                <time datetime="{{ order.created_at|date:'c' }}">{{ order.created_at|date:"M j, Y · g:i A" }}</time>
+              </td>
+              <td>
+                <a href="tel:{{ order.mobile_number }}">{{ order.mobile_number }}</a><br>
+                <span class="order-address">{{ order.delivery_address|linebreaksbr }}</span>
+              </td>
+              <td>
+                <ul class="order-table-items">
+                  {% for item in order.items.all %}
+                    <li>{% if item.product %}<a href="{% url 'product_detail' product_id=item.product.pk %}">{{ item.product_name }}</a>{% else %}{{ item.product_name }}{% endif %}{% if item.color %} · <span class="order-color-label"><i style="--swatch:{{ item.color_code }}" aria-hidden="true"></i>{{ item.color }}</span>{% endif %}{% if item.size %} · {{ item.size }}{% endif %} × {{ item.quantity }} <span>({{ item.unit_price|floatformat:2 }} each)</span></li>
+                  {% endfor %}
+                </ul>
+              </td>
+              <td><strong>{{ order.subtotal|floatformat:2 }}</strong></td>
+              <td>
+                <span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span>
+                <label class="sr-only" for="order-status-{{ order.pk }}">Order #{{ order.pk }} status</label>
+                <select id="order-status-{{ order.pk }}" name="status" form="order-update-{{ order.pk }}" required>
+                  {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if order.status == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td>
+                <label class="sr-only" for="order-remarks-{{ order.pk }}">Remarks for order #{{ order.pk }}</label>
+                <textarea id="order-remarks-{{ order.pk }}" name="remarks" form="order-update-{{ order.pk }}" maxlength="2000" rows="2" placeholder="Add or update remarks">{{ order.remarks }}</textarea>
+              </td>
+              <td>
+                <form id="order-update-{{ order.pk }}" method="post" action="{% url 'admin_order_update' order_id=order.pk %}" class="order-update-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="return_status" value="{{ status_filter }}">
+                  <button class="small-button" type="submit" disabled>Save</button>
+                </form>
+                <form method="post" action="{% url 'admin_order_delete' order_id=order.pk %}" class="order-delete-form" onsubmit="return confirm('Are you sure you want to delete order #{{ order.pk }}? This cannot be undone.');">
+                  {% csrf_token %}
+                  <input type="hidden" name="return_status" value="{{ status_filter }}">
+                  <button class="small-button delete" type="submit">Delete order</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.has_other_pages %}
+      <nav class="admin-order-pagination" aria-label="Order pages">
+        {% if page.has_previous %}<a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}page={{ page.previous_page_number }}">Previous</a>{% endif %}
+        <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}<a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}page={{ page.next_page_number }}">Next</a>{% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <p class="admin-orders-empty">No orders match this status.</p>
+  {% endif %}
+</section>
+<script src="{% static 'admin-orders.js' %}?v=1" defer></script>
+{% endblock %}

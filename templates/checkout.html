@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Checkout · Mybanno{% endblock %}
+{% block content %}
+<div class="container checkout-page">
+  <span class="eyebrow">Delivery details</span>
+  <h1>Checkout</h1>
+  <p class="checkout-intro">We are currently offering delivery in Bhopal city only. Enter your contact and delivery details below. No online payment is collected.</p>
+  <div class="checkout-order-summary"><h2>Order subtotal</h2><strong>{{ checkout_subtotal|floatformat:2 }}</strong></div>
+  <form method="post" class="checkout-form">
+    {% csrf_token %}
+    <h2 class="checkout-section-title">Contact details</h2>
+    <div class="form-group">
+      <label for="{{ form.recipient_name.id_for_label }}">Full name *</label>
+      {{ form.recipient_name }}
+      {% for error in form.recipient_name.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.mobile_number.id_for_label }}">Mobile number *</label>
+      {{ form.mobile_number }}
+      {% for error in form.mobile_number.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    <h2 class="checkout-section-title">Delivery address</h2>
+    <div class="form-group">
+      <label for="{{ form.address_line.id_for_label }}">House / flat, building, street *</label>
+      {{ form.address_line }}
+      {% for error in form.address_line.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.locality.id_for_label }}">Area / locality *</label>
+      {{ form.locality }}
+      {% for error in form.locality.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.landmark.id_for_label }}">Landmark (optional)</label>
+      {{ form.landmark }}
+      {% for error in form.landmark.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="form-group">
+      <label>City and state</label>
+      <p class="checkout-fixed-location">Bhopal, Madhya Pradesh</p>
+    </div>
+    <div class="form-group">
+      <label for="{{ form.postal_code.id_for_label }}">PIN code *</label>
+      {{ form.postal_code }}
+      {% for error in form.postal_code.errors %}<span class="field-error is-visible">{{ error }}</span>{% endfor %}
+    </div>
+    {% if form.non_field_errors %}<div class="flash danger">{{ form.non_field_errors }}</div>{% endif %}
+    <p class="checkout-note">Your order and delivery details will be saved so the order can be processed.</p>
+    <button class="button" type="submit">Place order</button>
+    <a class="secondary" href="{% url 'cart' %}">Back to cart</a>
+  </form>
+</div>
+{% endblock %}

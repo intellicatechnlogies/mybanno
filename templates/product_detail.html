@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ product.name }} · Mybanno{% endblock %}
+{% block content %}
+<div class="container product-detail-page">
+	<nav class="breadcrumb" aria-label="Breadcrumb"><a href="{% url 'index' %}">Shop</a><span aria-hidden="true">/</span><span>{{ product.category }}</span><span aria-hidden="true">/</span><span>{{ product.name }}</span></nav>
+	<section class="product-detail" aria-label="{{ product.name }}">
+		<div class="detail-gallery" data-product-gallery>
+			<div class="detail-gallery-main">
+				{% with media=gallery_items|first %}
+					{% if media.media_type == 'video' %}
+						<video id="detail-main-video" class="detail-main-media" src="{{ media.data_url }}" controls playsinline preload="metadata" aria-label="{{ product.name }} video"></video>
+						<img id="detail-main-image" class="detail-main-media" alt="{{ product.name }}" hidden>
+					{% elif media.data_url %}
+						<img id="detail-main-image" class="detail-main-media" src="{{ media.data_url }}" alt="{{ product.name }}">
+						<video id="detail-main-video" class="detail-main-media" controls playsinline preload="metadata" aria-label="{{ product.name }} video" hidden></video>
+					{% else %}
+						<div class="detail-image-placeholder">Mybanno</div>
+						<img id="detail-main-image" class="detail-main-media" alt="{{ product.name }}" hidden>
+						<video id="detail-main-video" class="detail-main-media" controls playsinline preload="metadata" aria-label="{{ product.name }} video" hidden></video>
+					{% endif %}
+				{% endwith %}
+				{% if gallery_items|length > 1 %}
+				<button class="detail-gallery-arrow detail-gallery-previous" type="button" data-gallery-step="-1" aria-label="Previous photo or video">&lt;</button>
+				<button class="detail-gallery-arrow detail-gallery-next" type="button" data-gallery-step="1" aria-label="Next photo or video">&gt;</button>
+				{% endif %}
+			</div>
+			{% if gallery_items %}
+			<div class="detail-gallery-items" hidden>
+				{% for media in gallery_items %}
+				<span data-media-type="{{ media.media_type }}" data-media-src="{{ media.data_url }}" data-media-alt="{{ product.name }}{% if media.media_type == 'video' %} video{% endif %}" data-media-color="{{ media.color }}"></span>
+				{% endfor %}
+			</div>
+			{% endif %}
+			{% if gallery_items|length > 1 %}
+			<p class="detail-gallery-position" aria-live="polite">1 / {{ gallery_items|length }}</p>
+			{% endif %}
+		</div>
+		<div class="product-detail-info">
+			<span class="eyebrow">{{ product.category }} · {{ product.cloth_type }}{% if product.occasion_category %} · {{ product.occasion_category }}{% endif %}</span>
+			<h1>{{ product.name }}</h1>
+			<div class="detail-rating-note">Product details</div>
+			<div class="detail-price">{% if product.offer_price != None %}<del>{{ product.actual_price|default:product.price|floatformat:2 }}</del><strong>{{ product.offer_price|floatformat:2 }}</strong><span class="sale-badge">{{ product.discount_percentage }}% OFF</span>{% else %}<strong>{{ product.actual_price|default:product.price|floatformat:2 }}</strong>{% endif %}</div>
+			<p class="detail-stock">{% if product.total_stock > 0 %}{{ product.total_stock }} in stock{% else %}Sold out{% endif %}</p>
+			{% if product.colors %}<div class="detail-sizes"><h2>Available colors and sizes</h2><div class="product-color-swatches detail-color-swatches" role="group" aria-label="Choose a color">{% for color in product.color_inventory %}<button type="button" class="product-color-swatch" data-detail-color="{{ color.color }}" style="--swatch:{{ color.value }}" aria-label="Select {{ color.color }} color" aria-pressed="false"></button>{% endfor %}</div><p class="selected-color-name sr-only" data-detail-color-name aria-live="polite"></p>{% for color in product.color_inventory %}<div class="size-pills detail-color-stock" data-color-inventory="{{ color.color }}" hidden>{% for inventory in color.sizes %}<span>{{ inventory.size }} · {{ inventory.stock }} in stock</span>{% endfor %}</div>{% endfor %}</div>{% elif product.sizes %}<div class="detail-sizes"><h2>Available sizes and quantities</h2><div class="size-pills">{% for inventory in product.size_inventory %}<span>{{ inventory.size }} · {{ inventory.stock }} in stock</span>{% endfor %}</div></div>{% endif %}
+			<div class="detail-description"><h2>About this product</h2><p>{{ product.description|default:"A carefully selected piece for your everyday wardrobe."|linebreaksbr }}</p></div>
+			<a class="secondary detail-back-link" href="{% url 'index' %}#collection">← Continue shopping</a>
+		</div>
+	</section>
+</div>
+<dialog class="product-image-lightbox" aria-label="Full product image">
+	<button class="product-image-lightbox-close" type="button" aria-label="Close full image">&times;</button>
+	<img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
+</dialog>
+<script src="{% static 'product-detail.js' %}?v=3" defer></script>
+{% endblock %}

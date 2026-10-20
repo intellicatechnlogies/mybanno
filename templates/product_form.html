@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ page_title }} · Mybanno{% endblock %}
+{% block content %}
+<div class="container">
+	<section class="form-card">
+		<span class="eyebrow">Collection manager</span>
+		<h1>{{ page_title }}</h1>
+		<p class="form-intro">Choose from your existing catalog options or add a new product name to keep the collection feeling fresh.</p>
+		<form id="product-form" method="post" enctype="multipart/form-data">
+			{% csrf_token %}
+			<div class="form-grid">
+				<div class="form-group"><label for="name">Product name *</label><select id="name" name="name" required><option value="">Choose a product name</option>{% for value, label in product_names %}<option value="{{ value }}" {% if product.name_choice == value %}selected{% endif %}>{{ label }}</option>{% endfor %}<option value="__other__" {% if product.name_choice == '__other__' %}selected{% endif %}>Other</option></select><div id="other-name-group" class="other-name-group" {% if product.name_choice != '__other__' %}hidden{% endif %}><label for="name_other">Enter product name *</label><input id="name_other" name="name_other" value="{{ product.name_other }}" placeholder="Enter a product name"></div></div>
+				<div class="form-group"><label for="cloth_type">Cloth type *</label><select id="cloth_type" name="cloth_type" required><option value="">Choose a cloth type</option>{% for value, label in cloth_types %}<option value="{{ value }}" {% if product.cloth_type_choice == value %}selected{% endif %}>{{ label }}</option>{% endfor %}<option value="__other__" {% if product.cloth_type_choice == '__other__' %}selected{% endif %}>Other</option></select><div id="other-cloth-type-group" {% if product.cloth_type_choice != '__other__' %}hidden{% endif %}><label for="cloth_type_other">Enter cloth type *</label><input id="cloth_type_other" name="cloth_type_other" value="{{ product.cloth_type_other }}" placeholder="Enter a cloth type"></div></div>
+				<div class="form-group"><label for="category">Category *</label><select id="category" name="category" required><option value="">Choose a category</option>{% for value, label in categories %}<option value="{{ value }}" {% if product.category_choice == value %}selected{% endif %}>{{ label }}</option>{% endfor %}<option value="__other__" {% if product.category_choice == '__other__' %}selected{% endif %}>Other</option></select><div id="other-category-group" {% if product.category_choice != '__other__' %}hidden{% endif %}><label for="category_other">Enter category *</label><input id="category_other" name="category_other" value="{{ product.category_other }}" placeholder="Enter a category"></div></div>
+				<div class="form-group"><label for="occasion_category">Occasion category</label><select id="occasion_category" name="occasion_category"><option value="">Choose an occasion</option>{% for value, label in occasions %}<option value="{{ value }}" {% if product.occasion_category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}<option value="__other__" {% if product.occasion_category == '__other__' %}selected{% endif %}>Other</option></select><div id="other-occasion-group" {% if product.occasion_category != '__other__' %}hidden{% endif %}><label for="occasion_category_other">Enter occasion *</label><input id="occasion_category_other" name="occasion_category_other" value="{{ product.occasion_category_other }}" placeholder="Enter an occasion"></div></div>
+				<div class="form-group"><label for="actual_price">Actual price *</label><input id="actual_price" name="actual_price" value="{{ product.actual_price }}" type="number" min="0" step="0.01" required placeholder="0.00"></div>
+				<div class="form-group"><label for="offer_price">Offer price</label><input id="offer_price" name="offer_price" value="{{ product.offer_price }}" type="number" min="0" step="0.01" placeholder="Optional discounted price"><span class="count">Applied whenever entered; must be lower than the actual price.</span><span id="offer-price-error" class="field-error" role="alert"></span></div>
+				<input id="stock" name="stock" value="{{ product.stock }}" type="hidden">
+				<div class="form-group offer-control"><label><input type="checkbox" name="on_offer" value="1" {% if product.on_offer %}checked{% endif %}> Mark this product as on offer</label><span class="count">Show a sale badge to customers.</span></div>
+				<fieldset class="form-group full size-options"><legend>Sizes *</legend><span class="count">Choose sizes and colors, then enter stock for each selected color. The total for each size is calculated automatically.</span></fieldset>
+				<div id="color-size-stock-panels" class="form-group full size-color-panels">
+					{% for size in size_color_options %}
+					<fieldset class="color-stock-panel size-color-panel" data-size-panel="{{ size.index }}" data-size="{{ size.size }}">
+						<legend><label class="size-panel-choice"><input type="checkbox" name="sizes" value="{{ size.size }}" {% if size.selected %}checked{% endif %}><span>{{ size.size }}</span></label></legend>
+						<details class="color-picker-dropdown"{% if size.has_color_selection %} open{% endif %}>
+							<summary><span class="color-selection-display">Color</span></summary>
+							<label class="color-search-label">Search<input type="search" class="size-color-search" placeholder="Find color" aria-label="Search colors for size {{ size.size }}"></label>
+							<div class="color-picker-options">{% for color in size.colors %}<label class="color-picker-option" data-color-name="{{ color.color|lower }}"><input type="checkbox" data-size="{{ size.size }}" data-color="{{ color.color }}" name="{{ color.field_name }}" value="1" {% if color.selected %}checked{% endif %}><i style="--swatch:{{ color.value }}" aria-hidden="true"></i><span>{{ color.color }}</span></label>{% endfor %}</div>
+						</details>
+						<div class="selected-color-stock-list">{% for color in size.colors %}<label class="selected-color-stock" data-stock-color="{{ color.color }}"{% if not color.selected %} hidden{% endif %}><span class="selected-color-name"><i style="--swatch:{{ color.value }}" aria-hidden="true"></i>{{ color.color }}</span><span class="size-stock-quantity">Qty<input name="{{ color.quantity_field_name }}" type="number" min="0" step="1" value="{{ color.quantity }}" {% if not size.selected or not color.selected %}disabled{% endif %} aria-label="{{ color.color }} quantity in size {{ size.size }}"></span></label>{% endfor %}</div>
+						<div class="size-total-stock"{% if not size.selected %} hidden{% endif %}><span>Total quantity</span><output class="size-total-quantity">{{ size.total_quantity }}</output></div>
+						{% if size.selected and size.legacy_stock %}<span class="count legacy-stock-notice">Existing stock: {{ size.legacy_stock }}. Assign it to one or more colors above; size total is now calculated from color quantities.</span>{% endif %}
+					</fieldset>
+					{% endfor %}
+				</div>
+				<div class="form-group full"><label for="description">Description</label><textarea id="description" name="description" rows="4" placeholder="Tell customers about the fit, feel, and details.">{{ product.description }}</textarea></div>
+				<div class="form-group full"><label for="images">Product photos * {% if product.has_images %}(select more photos to add to the gallery){% endif %}</label><input id="images" name="images" type="file" accept="image/png,image/jpeg,image/webp" multiple {% if not product.has_images %}required{% endif %}><span class="count">After choosing photos, select an optional color for each from the colors selected above. Photos without a color remain available for every color.</span><ul id="selected-images" class="selected-upload-list" aria-live="polite"></ul></div>
+				<div class="form-group full"><label for="videos">Product videos</label><input id="videos" name="videos" type="file" accept="video/mp4,video/webm,video/quicktime" multiple><span class="count">Optional. Choose multiple videos at once or add them in separate selections. MP4, WebM, or MOV, up to 5 MB each.</span><ul id="selected-videos" class="selected-upload-list" aria-live="polite"></ul></div>
+				{% if product.gallery_items %}
+				<div class="form-group full"><fieldset class="media-management"><legend>Current product media</legend><div class="media-management-grid">
+					{% for media in product.gallery_items %}
+					<label class="media-management-item">
+						{% if media.media_type == 'video' %}<video src="{{ media.data_url }}" muted preload="metadata"></video>{% else %}<img src="{{ media.data_url }}" alt="{{ media.filename }}">{% endif %}
+						{% if media.media_type == 'image' %}<span>Photo color <select name="{% if media.is_legacy %}image_color{% else %}media_color_{{ media.id }}{% endif %}"><option value="">All colors / no specific color</option>{% for color in color_stock_options %}<option value="{{ color.color }}" {% if media.color == color.color %}selected{% endif %}>{{ color.color }}</option>{% endfor %}</select></span>{% endif %}
+						<span><input type="checkbox" name="{% if media.is_legacy %}remove_legacy_image{% else %}remove_media{% endif %}" value="{% if media.id %}{{ media.id }}{% else %}1{% endif %}"> Remove {{ media.filename }}</span>
+					</label>
+					{% endfor %}
+				</div></fieldset></div>
+				{% endif %}
+			</div>
+			<div class="form-actions"><button class="button" type="submit">Save product</button><a class="secondary" href="{% url 'admin_dashboard' %}">Cancel</a></div>
+		</form>
+	</section>
+</div>
+<script src="{% static 'product-form.js' %}?v=21" defer></script>
+{% endblock %}
