@@ -1,0 +1,269 @@
+.mobile-category-nav {
+  display: none;
+}
+
+@media (max-width: 540px) {
+  main {
+    padding-top: 122px;
+  }
+
+  .container,
+  .collection-container {
+    width: calc(100% - 24px);
+  }
+
+  .nav-wrap {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "brand nav"
+      "search search";
+    align-items: center;
+    gap: 7px 10px;
+    min-height: 0;
+    padding: 7px 0 9px;
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .brand img {
+    width: 82px;
+    height: 48px;
+  }
+
+  .nav-wrap nav {
+    grid-area: nav;
+    min-width: 0;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-wrap nav::-webkit-scrollbar,
+  .mobile-category-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-wrap nav a {
+    flex: none;
+    font-size: 11px;
+  }
+
+  .nav-wrap nav .nav-button {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .header-search {
+    grid-area: search;
+    order: initial;
+    flex-basis: auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .header-search > input {
+    width: 0;
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .header-filter {
+    flex: none;
+  }
+
+  .header-filter summary {
+    padding: 10px 9px;
+    font-size: 12px;
+  }
+
+  .header-search > button {
+    flex: none;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .filter-menu {
+    top: 116px;
+  }
+
+  .shop-page {
+    padding-top: 8px;
+  }
+
+  .mobile-category-nav {
+    display: flex;
+    gap: 8px;
+    margin: 0 -12px 10px;
+    padding: 0 12px 8px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
+  }
+
+  .mobile-category-nav a {
+    flex: none;
+    padding: 7px 11px;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    background: var(--paper);
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .mobile-category-nav a[aria-current="page"] {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .hero {
+    padding: 24px 14px 20px;
+  }
+
+  .hero h1 {
+    font-size: clamp(32px, 8vw, 40px);
+  }
+
+  .hero p {
+    font-size: 12px;
+  }
+
+  .hero-promises {
+    gap: 6px;
+    margin-top: 12px;
+    font-size: 7px;
+  }
+
+  .section-heading {
+    margin: 24px 0 12px;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding-bottom: 38px;
+  }
+
+  .product-card {
+    padding-bottom: 46px;
+    border-radius: 5px;
+  }
+
+  .product-image {
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+  }
+
+  .product-info {
+    padding: 9px;
+  }
+
+  .product-info .eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    line-height: 1.4;
+  }
+
+  .product-info h3 {
+    margin: 5px 0 3px;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  .product-info p.product-description,
+  .product-see-more {
+    display: none;
+  }
+
+  .product-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+  }
+
+  .product-meta .stock {
+    font-size: 10px;
+  }
+
+  .price-display {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .price-display del {
+    font-size: 10px;
+  }
+
+  .price-display strong {
+    font-size: 12px;
+  }
+
+  .product-color-swatches {
+    gap: 5px;
+    margin: 7px 0;
+  }
+
+  .product-color-swatch {
+    width: 17px;
+    height: 17px;
+  }
+
+  .size-pills {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .size-pills span {
+    padding: 3px 5px;
+    font-size: 9px;
+  }
+
+  .product-card-add {
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: calc(100% - 16px);
+    padding: 9px 6px;
+    font-size: 11px;
+  }
+
+  .section-heading h2 {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 360px) {
+  .nav-wrap nav {
+    gap: 8px;
+  }
+
+  .nav-wrap nav a {
+    font-size: 10px;
+  }
+
+  .brand img {
+    width: 70px;
+  }
+
+  .header-filter summary {
+    padding: 9px 7px;
+  }
+
+  .product-grid {
+    gap: 8px;
+  }
+
+  .product-info {
+    padding: 7px;
+  }
+}

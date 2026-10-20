@@ -58,6 +58,8 @@ class StorefrontTests(TestCase):
         self.assertContains(response, "Your way.")
         self.assertContains(response, 'class="hero-cta"')
         self.assertContains(response, 'class="hero-background-image"', count=2)
+        self.assertContains(response, 'class="mobile-category-nav"')
+        self.assertContains(response, 'href="/static/mobile.css?v=1"')
         self.assertNotContains(response, 'class="hero-showcase"')
         self.assertContains(response, "25% OFF")
         self.assertContains(response, "S · 2")

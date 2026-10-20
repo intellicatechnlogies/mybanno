@@ -2,6 +2,12 @@
 {% block title %}Shop · Mybanno{% endblock %}
 {% block content %}
 <div class="shop-page">
+<nav class="mobile-category-nav" aria-label="Browse product categories">
+  <a href="{% url 'index' %}#collection" {% if not request.GET.category %}aria-current="page"{% endif %}>All pieces</a>
+  {% for category in header_categories %}
+    <a href="{% url 'index' %}?category={{ category|urlencode }}#collection" {% if request.GET.category == category %}aria-current="page"{% endif %}>{{ category }}</a>
+  {% endfor %}
+</nav>
 <section class="hero">
   <img class="hero-background-image" alt="" aria-hidden="true">
   <img class="hero-background-image" alt="" aria-hidden="true">
