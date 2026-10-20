@@ -54,6 +54,11 @@ class StorefrontTests(TestCase):
         self.first_product.save(update_fields=["size_stock", "stock"])
 
         response = self.client.get(reverse("index"), {"q": "Linen"})
+        self.assertContains(response, "Wear your day.")
+        self.assertContains(response, "Your way.")
+        self.assertContains(response, 'class="hero-cta"')
+        self.assertContains(response, 'class="hero-background-image"', count=2)
+        self.assertNotContains(response, 'class="hero-showcase"')
         self.assertContains(response, "25% OFF")
         self.assertContains(response, "S · 2")
         self.assertContains(response, "M · 1")

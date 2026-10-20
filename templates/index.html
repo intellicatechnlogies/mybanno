@@ -2,11 +2,21 @@
 {% block title %}Shop · Mybanno{% endblock %}
 {% block content %}
 <div class="shop-page">
-<section class="hero"><div class="container hero-inner"><div class="hero-copy"><span class="eyebrow">The new everyday edit</span><h1>Clothes that feel like you.</h1><p>Thoughtfully chosen fabrics, relaxed silhouettes, and little details that make getting dressed feel effortless.</p><div class="hero-actions"><a class="button" href="#collection">Explore the collection</a><span class="hero-note">Made for slow mornings &amp; busy days</span></div></div><div class="hero-art" aria-hidden="true"><span>Wear<br>your<br>story</span></div></div></section>
+<section class="hero">
+  <img class="hero-background-image" alt="" aria-hidden="true">
+  <img class="hero-background-image" alt="" aria-hidden="true">
+  <div class="hero-inner">
+    <span class="hero-kicker">MYBANNO <i aria-hidden="true">✳</i> EVERYDAY CLOTHING</span>
+    <h1>Wear your day.<br><em>Your way.</em></h1>
+    <p>Comfortable fits, thoughtful details, and everyday favourites chosen to feel like you.</p>
+    <a class="hero-cta" href="#collection">Explore the collection <span aria-hidden="true">→</span></a>
+    <div class="hero-promises"><span>Comfort, always</span><i aria-hidden="true"></i><span>Easy everyday style</span><i aria-hidden="true"></i><span>From Bhopal, with care</span></div>
+  </div>
+</section>
 <div class="container collection-container">
   <p id="storefront-notice" class="storefront-notice" role="status" aria-live="polite" hidden></p>
   {% if sale_active %}<div class="sale-banner"><strong>Sale is going on</strong><span>Limited-time offers are available on selected pieces.</span></div>{% endif %}
-  <div class="section-heading" id="collection"><div><span class="eyebrow">Find your next favourite</span><h2>Our collection</h2><p class="collection-intro">Easy layers, expressive details, and everyday pieces chosen to stay in your rotation.</p></div><span class="count">{{ products|length }} item{% if products|length != 1 %}s{% endif %}</span></div>
+  <div class="section-heading" id="collection"><span class="count">{{ products|length }} item{% if products|length != 1 %}s{% endif %}</span></div>
   <div class="product-grid" id="product-grid">
     {% include '_product_cards.html' %}
     {% if not products %}<div class="empty"><h3>No pieces found</h3><p>Try a different search or clear your filters.</p></div>{% endif %}
@@ -54,5 +64,5 @@
   <img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
 </dialog>
 {% load static %}
-<script src="{% static 'storefront.js' %}?v=17" defer></script>
+<script src="{% static 'storefront.js' %}?v=18" defer></script>
 {% endblock %}

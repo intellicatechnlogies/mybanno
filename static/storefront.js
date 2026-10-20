@@ -3,6 +3,44 @@
   const loader = document.getElementById('product-loader');
   const modal = document.getElementById('product-modal');
   const imageLightbox = document.querySelector('.product-image-lightbox');
+  const hero = document.querySelector('.hero');
+  const heroBackgrounds = hero
+    ? Array.from(hero.querySelectorAll('.hero-background-image'))
+    : [];
+
+  if (grid && heroBackgrounds.length === 2) {
+    let activeBackground = -1;
+
+    const changeHeroBackground = () => {
+      const imageSources = Array.from(grid.querySelectorAll('img.product-image[src]'))
+        .map((image) => image.currentSrc || image.src)
+        .filter((source, index, sources) => source && sources.indexOf(source) === index);
+      if (!imageSources.length) return;
+
+      const candidates = imageSources.filter(
+        (source) => heroBackgrounds[activeBackground]?.src !== source,
+      );
+      if (!candidates.length) return;
+      const source = candidates[Math.floor(Math.random() * candidates.length)];
+      const nextBackground = (activeBackground + 1) % heroBackgrounds.length;
+      const image = heroBackgrounds[nextBackground];
+
+      image.onload = () => {
+        heroBackgrounds.forEach((background, index) => {
+          background.classList.toggle('is-active', index === nextBackground);
+        });
+        activeBackground = nextBackground;
+      };
+      image.onerror = () => {
+        image.classList.remove('is-active');
+      };
+      image.src = source;
+    };
+
+    changeHeroBackground();
+    window.setInterval(changeHeroBackground, 10000);
+  }
+
   if (grid && modal) {
     const modalImage = modal.querySelector('.product-modal-image');
     const modalVideo = modal.querySelector('.product-modal-video');

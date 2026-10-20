@@ -10,7 +10,7 @@
   {% load static %}
   <link rel="icon" type="image/png" href="{% static 'mibanno-logo-white.png' %}?v=2">
   <link rel="apple-touch-icon" href="{% static 'mibanno-logo-white.png' %}?v=2">
-  <link rel="stylesheet" href="{% static 'style.css' %}?v=31">
+  <link rel="stylesheet" href="{% static 'style.css' %}?v=40">
   <script src="{% static 'header-filters.js' %}?v=2" defer></script>
   <script src="{% static 'admin-idle.js' %}?v=2" defer></script>
 </head>
@@ -97,6 +97,6 @@
     {% if messages %}<div class="container flash-stack">{% for message in messages %}<div class="flash {% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>{% endfor %}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
-  <footer><div class="container">Thoughtfully made, comfortably worn. &copy; {{ 2026 }} Mybanno.</div></footer>
+  <footer><div class="container"><span>Thoughtfully made, comfortably worn. &copy; {{ 2026 }} Mybanno.</span><span class="footer-credit">Website by <a href="https://intellicatechnology.com/" target="_blank" rel="noopener noreferrer">Intellica Technology</a></span></div></footer>
 </body>
 </html>
