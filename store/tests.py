@@ -306,7 +306,10 @@ class StorefrontTests(TestCase):
         self.assertContains(catalog_response, 'class="product-card-add"')
         self.assertNotContains(catalog_response, 'class="product-card-link" href=')
         self.assertContains(catalog_response, '<dialog class="product-modal"')
-        self.assertNotContains(catalog_response, 'target="_blank"')
+        self.assertContains(
+            catalog_response,
+            'href="https://intellicatechnology.com/" target="_blank" rel="noopener noreferrer"',
+        )
 
         modal_response = self.client.get(
             reverse("product_modal_data", args=[self.first_product.pk])
@@ -319,7 +322,6 @@ class StorefrontTests(TestCase):
             ["image", "video"],
         )
         self.assertEqual(modal_product["sizes"], ["S", "M"])
-        self.assertNotContains(catalog_response, 'target="_blank"')
 
         detail_response = self.client.get(reverse("product_detail", args=[self.first_product.pk]))
         self.assertEqual(detail_response.status_code, 200)
