@@ -2,7 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 # staticfiles/
-# store.db
+store.db
 .env
 .product-name-catalog.json
 .product-name-catalog.json.tmp
