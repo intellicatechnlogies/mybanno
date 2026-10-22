@@ -57,6 +57,9 @@ DATABASES = {
         "NAME": Path(os.environ.get("DJANGO_DB_PATH", BASE_DIR / "store.db")),
     }
 }
+PRODUCT_NAME_CATALOG_PATH = Path(
+    os.environ.get("PRODUCT_NAME_CATALOG_PATH", BASE_DIR / ".product-name-catalog.json")
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

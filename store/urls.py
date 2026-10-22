@@ -15,6 +15,7 @@ urlpatterns = [
     path("admin/login", views.admin_login, name="admin_login"),
     path("admin/logout", views.admin_logout, name="admin_logout"),
     path("admin", views.admin_dashboard, name="admin_dashboard"),
+    path("admin/product-names/delete", views.delete_product_name_option, name="delete_product_name_option"),
     path("admin/orders", views.admin_orders, name="admin_orders"),
     path("admin/orders/<int:order_id>/update", views.admin_order_update, name="admin_order_update"),
     path("admin/orders/<int:order_id>/delete", views.admin_order_delete, name="admin_order_delete"),

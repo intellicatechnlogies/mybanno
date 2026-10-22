@@ -4,3 +4,5 @@ __pycache__/
 # staticfiles/
 # store.db
 .env
+.product-name-catalog.json
+.product-name-catalog.json.tmp

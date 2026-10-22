@@ -2,18 +2,29 @@ import time
 import base64
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth.hashers import make_password
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from .forms import DEFAULT_PRODUCT_NAMES, ProductForm
 from .models import AdminAccount, Product, ProductMedia, ShopOrder, ShopOrderItem
 
 
 class StorefrontTests(TestCase):
     def setUp(self):
+        catalog_path = Path(__file__).with_name(
+            f".test-product-name-catalog-{id(self)}.json"
+        )
+        settings_override = override_settings(PRODUCT_NAME_CATALOG_PATH=catalog_path)
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        catalog_path.unlink(missing_ok=True)
+        self.addCleanup(lambda: catalog_path.unlink(missing_ok=True))
+        self.addCleanup(lambda: catalog_path.with_name(f"{catalog_path.name}.tmp").unlink(missing_ok=True))
         self.client.defaults["HTTP_HOST"] = "localhost"
         self.first_product = Product.objects.create(
             name="Linen Shirt",
@@ -155,6 +166,11 @@ class StorefrontTests(TestCase):
         )
 
         add_url = reverse("cart_add")
+        missing_color_response = self.client.post(
+            add_url,
+            {"product_id": self.first_product.pk, "size": "S", "quantity": "1"},
+        )
+        self.assertEqual(missing_color_response.status_code, 400)
         add_response = self.client.post(
             add_url,
             {"product_id": self.first_product.pk, "color": "Blue", "size": "S", "quantity": "2"},
@@ -308,6 +324,7 @@ class StorefrontTests(TestCase):
         self.assertContains(catalog_response, 'class="product-card-add"')
         self.assertNotContains(catalog_response, 'class="product-card-link" href=')
         self.assertContains(catalog_response, '<dialog class="product-modal"')
+        self.assertContains(catalog_response, "<summary>Product description</summary>")
         self.assertContains(
             catalog_response,
             'href="https://intellicatechnology.com/" target="_blank" rel="noopener noreferrer"',
@@ -338,6 +355,13 @@ class StorefrontTests(TestCase):
         self.assertContains(detail_response, "product-detail.js")
 
     def test_cart_add_update_remove_and_stock_validation(self):
+        self.assertIn(
+            ("XXXL", "XXXL"),
+            ProductForm().fields["sizes"].choices,
+        )
+        catalog_response = self.client.get(reverse("index"))
+        self.assertNotContains(catalog_response, "5 items")
+        self.assertNotContains(catalog_response, "2 items")
         add_url = reverse("cart_add")
         response = self.client.post(
             add_url,
@@ -377,6 +401,50 @@ class StorefrontTests(TestCase):
         )
         self.assertRedirects(response, cart_url)
         self.assertEqual(self.client.session["shop_cart"], {})
+
+    def test_single_color_product_can_be_added_without_selecting_color(self):
+        product = Product.objects.create(
+            name="Single color shirt",
+            cloth_type="Cotton",
+            category="Shirts",
+            price="50.00",
+            stock=2,
+            sizes="M",
+            size_stock={"M": 2},
+            color_stock={"Blue": {"M": 2}},
+        )
+        modal = self.client.get(reverse("product_modal_data", args=[product.pk])).json()
+        self.assertEqual([color["name"] for color in modal["colors"]], ["Blue"])
+
+        response = self.client.post(
+            reverse("cart_add"),
+            {"product_id": product.pk, "size": "M", "quantity": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["color"], "Blue")
+        self.assertIn(f"{product.pk}|Blue|M", self.client.session["shop_cart"])
+
+    def test_single_in_stock_color_can_be_added_without_selecting_color(self):
+        product = Product.objects.create(
+            name="One available color shirt",
+            cloth_type="Cotton",
+            category="Shirts",
+            price="50.00",
+            stock=2,
+            sizes="M",
+            size_stock={"M": 2},
+            color_stock={"Blue": {"M": 2}, "Black": {"M": 0}},
+        )
+        modal = self.client.get(reverse("product_modal_data", args=[product.pk])).json()
+        self.assertEqual([color["name"] for color in modal["colors"]], ["Blue"])
+
+        response = self.client.post(
+            reverse("cart_add"),
+            {"product_id": product.pk, "size": "M", "quantity": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["color"], "Blue")
+        self.assertIn(f"{product.pk}|Blue|M", self.client.session["shop_cart"])
 
     def test_checkout_saves_contact_order_items_and_decrements_stock(self):
         add_response = self.client.post(
@@ -676,6 +744,10 @@ class StorefrontTests(TestCase):
         )
         self.assertRedirects(response, reverse("admin_dashboard"))
         product = Product.objects.get(name="New Shirt")
+        self.assertNotIn(
+            "New Shirt",
+            [value for value, _ in ProductForm().fields["name"].choices],
+        )
         self.assertEqual(product.cloth_type, "Woven blend")
         self.assertEqual(product.category, "Festive wear")
         self.assertEqual(product.occasion_category, "Graduation")
@@ -733,8 +805,8 @@ class StorefrontTests(TestCase):
         response = self.client.post(
             reverse("edit_product", args=[product.pk]),
             {
-                "name": "New Shirt",
-                "name_other": "",
+                "name": "__other__",
+                "name_other": "New Shirt",
                 "cloth_type": "Cotton",
                 "category": "Tops",
                 "occasion_category": "Party",
@@ -753,8 +825,8 @@ class StorefrontTests(TestCase):
         response = self.client.post(
             reverse("edit_product", args=[product.pk]),
             {
-                "name": "New Shirt",
-                "name_other": "",
+                "name": "__other__",
+                "name_other": "New Shirt",
                 "cloth_type": "Cotton",
                 "category": "Tops",
                 "occasion_category": "Party",
@@ -782,6 +854,64 @@ class StorefrontTests(TestCase):
         response = self.client.post(reverse("delete_product", args=[product.pk]))
         self.assertRedirects(response, reverse("admin_dashboard"))
         self.assertFalse(Product.objects.filter(pk=product.pk).exists())
+
+    def test_product_names_are_hardcoded_and_other_name_is_not_added_to_options(self):
+        product = Product.objects.create(
+            name=DEFAULT_PRODUCT_NAMES[0],
+            cloth_type="Linen",
+            category="Shirts",
+            price="80.00",
+            occasion_category="Casual",
+        )
+        private_product = Product.objects.create(
+            name="One-off label",
+            cloth_type="Custom cloth",
+            category="Custom category",
+            price="80.00",
+            occasion_category="Custom occasion",
+        )
+        choices = [value for value, _ in ProductForm().fields["name"].choices]
+        self.assertEqual(choices[1:-1], sorted(DEFAULT_PRODUCT_NAMES, key=str.casefold))
+        self.assertNotIn("One-off label", choices)
+        self.assertIn("__other__", choices)
+        self.assertIn(
+            "Custom cloth",
+            [value for value, _ in ProductForm().fields["cloth_type"].choices],
+        )
+        self.assertIn(
+            "Custom category",
+            [value for value, _ in ProductForm().fields["category"].choices],
+        )
+        self.assertIn(
+            "Custom occasion",
+            [value for value, _ in ProductForm().fields["occasion_category"].choices],
+        )
+
+        session = self.client.session
+        session["admin_id"] = 42
+        session["admin_last_activity"] = time.time()
+        session.save()
+        response = self.client.post(
+            reverse("delete_product_name_option"),
+            {"name": DEFAULT_PRODUCT_NAMES[0]},
+        )
+        self.assertRedirects(response, reverse("admin_dashboard"))
+        self.assertTrue(Product.objects.filter(pk=product.pk).exists())
+        self.assertNotIn(
+            DEFAULT_PRODUCT_NAMES[0],
+            [value for value, _ in ProductForm().fields["name"].choices],
+        )
+        self.assertTrue(Product.objects.filter(pk=private_product.pk).exists())
+
+        response = self.client.post(
+            reverse("delete_product_name_option"),
+            {"name": "__other__"},
+        )
+        self.assertRedirects(response, reverse("admin_dashboard"))
+        self.assertIn(
+            "__other__",
+            [value for value, _ in ProductForm().fields["name"].choices],
+        )
 
     def test_admin_session_expires_after_inactivity(self):
         session = self.client.session

@@ -22,7 +22,7 @@
 <div class="container collection-container">
   <p id="storefront-notice" class="storefront-notice" role="status" aria-live="polite" hidden></p>
   {% if sale_active %}<div class="sale-banner"><strong>Sale is going on</strong><span>Limited-time offers are available on selected pieces.</span></div>{% endif %}
-  <div class="section-heading" id="collection"><span class="count">{{ products|length }} item{% if products|length != 1 %}s{% endif %}</span></div>
+  <div class="section-heading" id="collection"></div>
   <div class="product-grid" id="product-grid">
     {% include '_product_cards.html' %}
     {% if not products %}<div class="empty"><h3>No pieces found</h3><p>Try a different search or clear your filters.</p></div>{% endif %}
@@ -51,11 +51,11 @@
         <h2 id="modal-product-name"></h2>
         <div class="product-modal-prices"></div>
         <p class="product-modal-stock"></p>
-        <div class="product-modal-description"><h3>About this product</h3><p></p></div>
       </div>
       <form class="product-modal-cart-form" data-add-url="{% url 'cart_add' %}">
         {% csrf_token %}
         <input type="hidden" name="product_id">
+        <details class="product-modal-description"><summary>Product description</summary><p></p></details>
         <div class="product-modal-colors" hidden><span class="product-modal-color-label">Choose a color</span><input id="product-modal-color" name="color" type="hidden"><div class="product-color-swatches" role="group" aria-label="Available colors"></div><span class="selected-color-name" aria-live="polite" hidden><i class="selected-color-indicator" aria-hidden="true"></i><span class="selected-color-text"></span></span><span class="product-modal-color-prompt" role="status" aria-live="polite" hidden>Please select a color first to choose a size.</span></div>
         <div class="product-modal-sizes" hidden><label for="product-modal-size">Available size</label><select id="product-modal-size" class="product-modal-size" name="size" required></select></div>
         <label for="product-modal-quantity">Quantity</label>
@@ -70,5 +70,5 @@
   <img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
 </dialog>
 {% load static %}
-<script src="{% static 'storefront.js' %}?v=18" defer></script>
+<script src="{% static 'storefront.js' %}?v=25" defer></script>
 {% endblock %}

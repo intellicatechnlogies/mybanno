@@ -6,7 +6,7 @@
 	<section class="form-card">
 		<span class="eyebrow">Collection manager</span>
 		<h1>{{ page_title }}</h1>
-		<p class="form-intro">Choose from your existing catalog options or add a new product name to keep the collection feeling fresh.</p>
+		<p class="form-intro">Choose a shared product name, or use “Other” for a name that applies only to this product.</p>
 		<form id="product-form" method="post" enctype="multipart/form-data">
 			{% csrf_token %}
 			<div class="form-grid">
@@ -34,7 +34,7 @@
 					</fieldset>
 					{% endfor %}
 				</div>
-				<div class="form-group full"><label for="description">Description</label><textarea id="description" name="description" rows="4" placeholder="Tell customers about the fit, feel, and details.">{{ product.description }}</textarea></div>
+				<div class="form-group full"><label for="description">Product description (shown to customers)</label><textarea id="description" name="description" rows="4" placeholder="Tell customers about the fit, feel, and details.">{{ product.description }}</textarea><span class="count">Customers can expand “Product description” in the product details to read this text.</span></div>
 				<div class="form-group full"><label for="images">Product photos * {% if product.has_images %}(select more photos to add to the gallery){% endif %}</label><input id="images" name="images" type="file" accept="image/png,image/jpeg,image/webp" multiple {% if not product.has_images %}required{% endif %}><span class="count">After choosing photos, select an optional color for each from the colors selected above. Photos without a color remain available for every color.</span><ul id="selected-images" class="selected-upload-list" aria-live="polite"></ul></div>
 				<div class="form-group full"><label for="videos">Product videos</label><input id="videos" name="videos" type="file" accept="video/mp4,video/webm,video/quicktime" multiple><span class="count">Optional. Choose multiple videos at once or add them in separate selections. MP4, WebM, or MOV, up to 5 MB each.</span><ul id="selected-videos" class="selected-upload-list" aria-live="polite"></ul></div>
 				{% if product.gallery_items %}

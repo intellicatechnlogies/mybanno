@@ -19,6 +19,8 @@ Product photos and videos are stored in the SQLite database as base64 data URLs.
 
 Products can be tagged with an occasion (such as Casual, Office, Party, Wedding, Festive, or Vacation). Occasion tags can also be added as custom options and are available in the shop filters and search.
 
+The product-name choices are hardcoded in the product form and do not come from saved products. A name entered with “Other” is saved only on that individual product and is not added to the choices. Admins can remove a hardcoded product-name option from the dashboard without changing existing products; removals are kept outside the database in `.product-name-catalog.json` (or the path set by `PRODUCT_NAME_CATALOG_PATH`). Other catalog options are unchanged.
+
 Admins choose sizes from a single horizontal row and select colors from searchable checkboxes within each size. Stock is entered per selected size/color combination, and each size total and product total are calculated automatically from those color quantities. Uploaded photos can optionally be associated with a color so selecting that swatch opens its photo; new uploads offer color associations even when added before choosing inventory variants. Shop and product-modal stock counts subtract quantities already in the visitor's cart, and unavailable color/size choices are disabled or hidden. Cart and order details show the swatch and color name, with the chosen color and size saved on each order item.
 
 Set a strong `SECRET_KEY`, `DEBUG=False`, and suitable `ALLOWED_HOSTS` values before deploying publicly.

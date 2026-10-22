@@ -18,11 +18,13 @@ from werkzeug.security import check_password_hash as check_legacy_password_hash
 from .forms import (
     CheckoutForm,
     DEFAULT_COLOR_VALUES,
+    DEFAULT_PRODUCT_NAMES,
     DEFAULT_SIZES,
     OrderUpdateForm,
     ProductForm,
 )
 from .models import AdminAccount, Product, ShopOrder, ShopOrderItem
+from .product_names import product_name_options, remove_product_name_option
 
 PRODUCT_BATCH_SIZE = 5
 
@@ -281,15 +283,28 @@ def cart_add(request):
         return JsonResponse({"error": "This product is no longer available."}, status=404)
     size = request.POST.get("size", "").strip()
     color = request.POST.get("color", "").strip()
-    if product.colors and color not in product.colors:
+    cart = request.session.get("shop_cart", {})
+    cart = cart if isinstance(cart, dict) else {}
+    add_remaining_stock([product], cart)
+    available_colors = [
+        product_color for product_color in product.colors
+        if any(product.remaining_color_stock.get(product_color, {}).values())
+    ]
+    if len(available_colors) > 1 and color not in available_colors:
         return JsonResponse({"error": "Choose an available color."}, status=400)
+    if len(available_colors) == 1:
+        if color and color not in available_colors:
+            return JsonResponse({"error": "Choose an available color."}, status=400)
+        color = color or available_colors[0]
+    elif color not in product.colors and available_colors:
+        return JsonResponse({"error": "Choose an available color."}, status=400)
+    elif not product.colors:
+        color = ""
     if product.size_list and size not in product.size_list:
         return JsonResponse({"error": "Choose an available size."}, status=400)
     if quantity < 1:
         return JsonResponse({"error": "Quantity must be at least 1."}, status=400)
 
-    cart = request.session.get("shop_cart", {})
-    cart = cart if isinstance(cart, dict) else {}
     product_quantity = sum(
         int(item.get("quantity", 0))
         for item in cart.values()
@@ -627,7 +642,28 @@ def admin_logout(request):
 @admin_required
 def admin_dashboard(request):
     products = Product.objects.prefetch_related("media_items").order_by("-created_at")
-    return render(request, "admin_dashboard.html", {"products": products})
+    return render(
+        request,
+        "admin_dashboard.html",
+        {
+            "products": products,
+            "product_names": product_name_options(DEFAULT_PRODUCT_NAMES),
+        },
+    )
+
+
+@admin_required
+def delete_product_name_option(request):
+    if request.method != "POST":
+        return HttpResponse(status=405)
+
+    name = request.POST.get("name", "").strip()
+    if not name or name not in product_name_options(DEFAULT_PRODUCT_NAMES):
+        messages.error(request, "Choose a valid product name option.")
+    else:
+        remove_product_name_option(name)
+        messages.success(request, f'"{name}" was removed from the product name options.')
+    return redirect("admin_dashboard")
 
 
 @admin_required

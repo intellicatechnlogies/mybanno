@@ -6,12 +6,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Product, ProductMedia, ShopOrder
+from .product_names import product_name_options
 
 DEFAULT_PRODUCT_NAMES = ["Linen Day Shirt", "Relaxed Cotton Tee", "Everyday Kurta", "Classic Overshirt"]
 DEFAULT_CLOTH_TYPES = ["Linen", "Cotton", "Silk", "Denim", "Khadi", "Wool", "Rayon"]
 DEFAULT_CATEGORIES = ["Shirts", "Tops", "Dresses", "Bottoms", "Kurtas", "Outerwear", "Accessories"]
 DEFAULT_OCCASIONS = ["Casual", "Everyday", "Office", "Party", "Wedding", "Festive", "Vacation", "Ceremony"]
-DEFAULT_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Free Size"]
+DEFAULT_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "Free Size"]
 MAX_COLORS = 20
 DEFAULT_COLOR_VALUES = {
     "black": "#000000",
@@ -179,7 +180,7 @@ class ProductForm(forms.Form):
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
         super().__init__(*args, **kwargs)
-        names = catalog_options("name", DEFAULT_PRODUCT_NAMES)
+        names = product_name_options(DEFAULT_PRODUCT_NAMES)
         self.fields["name"].choices = [
             ("", "Choose a product name"),
             *((name, name) for name in names),
@@ -230,8 +231,16 @@ class ProductForm(forms.Form):
                 )
         if instance and not kwargs.get("initial"):
             self.initial.update({
-                "name": instance.name if instance.name in names else "__other__",
-                "name_other": instance.name if instance.name not in names else "",
+                "name": (
+                    instance.name
+                    if instance.name in names
+                    else "__other__"
+                ),
+                "name_other": (
+                    instance.name
+                    if instance.name not in names
+                    else ""
+                ),
                 "cloth_type": instance.cloth_type if instance.cloth_type in cloth_types else "__other__",
                 "cloth_type_other": instance.cloth_type if instance.cloth_type not in cloth_types else "",
                 "category": instance.category if instance.category in categories else "__other__",

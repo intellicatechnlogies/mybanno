@@ -112,7 +112,7 @@
       const selectedSize = sizeSelect.value;
       const selectedColor = colorSelect.value;
       const colorPrompt = modal.querySelector('.product-modal-color-prompt');
-      const colorRequired = activeProduct.colors.length > 0;
+      const colorRequired = activeProduct.colors.length > 1;
       const selectColorFirst = colorRequired && !selectedColor;
       colorPrompt.hidden = !selectColorFirst;
       sizeSelect.disabled = selectColorFirst;
@@ -131,14 +131,18 @@
       quantity.max = String(available);
       if (Number(quantity.value) > available) quantity.value = String(available || 1);
       submitButton.disabled = available < 1
-        || (activeProduct.colors.length > 0 && !selectedColor)
+        || (activeProduct.colors.length > 1 && !selectedColor)
         || (activeProduct.sizes.length > 0 && !selectedSize);
       modal.querySelector('.product-modal-stock').textContent = activeProduct.colors.length
-        ? (selectedColor && selectedSize
-          ? `${available} in stock for ${selectedColor}, size ${selectedSize}`
+        ? activeProduct.colors.length > 1
+          ? (selectedColor && selectedSize
+            ? `${available} in stock for ${selectedColor}, size ${selectedSize}`
+            : selectedSize
+              ? `Please select a color · ${available} in stock for size ${selectedSize}`
+              : `Choose a color and size · ${activeProduct.stock} in stock`)
           : selectedSize
-            ? `Please select a color · ${available} in stock for size ${selectedSize}`
-            : `Choose a color and size · ${activeProduct.stock} in stock`)
+            ? `${available} in stock for ${activeProduct.colors[0].name}, size ${selectedSize}`
+            : `Choose a size · ${activeProduct.stock} in stock for ${activeProduct.colors[0].name}`
         : activeProduct.sizes.length
           ? (selectedSize
             ? `${available} in stock for size ${selectedSize}`
@@ -151,7 +155,7 @@
       const sizeSelect = modal.querySelector('.product-modal-size');
       const selectedColor = modal.querySelector('#product-modal-color').value;
       const previousSize = sizeSelect.value;
-      const selectColorFirst = activeProduct.colors.length > 0 && !selectedColor;
+      const selectColorFirst = activeProduct.colors.length > 1 && !selectedColor;
       sizeSelect.replaceChildren();
       const chooseSize = document.createElement('option');
       chooseSize.value = '';
@@ -205,6 +209,7 @@
       const sizeSelect = modal.querySelector('.product-modal-size');
       const colorsContainer = modal.querySelector('.product-modal-colors');
       const colorSelect = modal.querySelector('#product-modal-color');
+      const colorLabel = colorsContainer.querySelector('.product-modal-color-label');
       const colorSwatches = colorsContainer.querySelector('.product-color-swatches');
       colorSwatches.replaceChildren();
       const selectedColorName = colorsContainer.querySelector('.selected-color-name');
@@ -212,6 +217,7 @@
       selectedColorName.querySelector('.selected-color-text').textContent = '';
       colorSelect.value = '';
       product.colors.forEach((color) => {
+        if (product.colors.length === 1) return;
         const swatch = document.createElement('button');
         swatch.type = 'button';
         swatch.className = 'product-color-swatch';
@@ -222,7 +228,16 @@
         colorSwatches.append(swatch);
       });
       colorsContainer.hidden = product.colors.length === 0;
-      colorSelect.required = product.colors.length > 0;
+      colorLabel.hidden = product.colors.length === 1;
+      colorSelect.required = product.colors.length > 1;
+      if (product.colors.length === 1) {
+        colorSelect.value = product.colors[0].name;
+        selectedColorName.querySelector('.selected-color-indicator')
+          .style.setProperty('--swatch', product.colors[0].value);
+        selectedColorName.querySelector('.selected-color-text').textContent =
+          `Color: ${product.colors[0].name}`;
+        selectedColorName.hidden = false;
+      }
       sizesContainer.hidden = product.sizes.length === 0;
       sizeSelect.required = product.sizes.length > 0;
       populateSizeOptions();
@@ -246,6 +261,7 @@
     grid.addEventListener('click', (event) => {
       const cardButton = event.target.closest('.product-card-link, .product-card-add');
       if (!cardButton) return;
+      const isAddButton = cardButton.classList.contains('product-card-add');
       modal.showModal();
       document.body.classList.add('product-modal-open');
       const activeRequest = ++requestId;
@@ -253,7 +269,7 @@
       modal.querySelector('#modal-product-name').textContent = '';
       modal.querySelector('.product-modal-category').textContent = '';
       modal.querySelector('.product-modal-stock').textContent = '';
-      modal.querySelector('.product-modal-info-scroll .product-modal-description p').textContent = '';
+      modal.querySelector('.product-modal-description p').textContent = '';
       modal.querySelector('.product-modal-prices').replaceChildren();
       modal.querySelector('.product-modal-size').replaceChildren();
       modal.querySelector('#product-modal-color').value = '';
@@ -272,6 +288,12 @@
           if (activeRequest !== requestId || !modal.open) return;
           status.textContent = '';
           updateProduct(product);
+          if (isAddButton && product.colors.length <= 1 && product.sizes.length <= 1) {
+            const sizeSelect = modal.querySelector('.product-modal-size');
+            sizeSelect.value = product.sizes[0] || '';
+            syncSelectedSize();
+            modal.querySelector('.product-modal-cart-form').requestSubmit();
+          }
         })
         .catch(() => {
           if (activeRequest !== requestId || !modal.open) return;
@@ -343,6 +365,22 @@
       event.preventDefault();
       const form = event.currentTarget;
       const submitButton = form.querySelector('button[type="submit"]');
+      if (!activeProduct) {
+        status.textContent = 'Product details are still loading. Please try again.';
+        return;
+      }
+      const colorSelect = modal.querySelector('#product-modal-color');
+      const sizeSelect = modal.querySelector('.product-modal-size');
+      if (activeProduct.colors.length === 1) {
+        colorSelect.value = activeProduct.colors[0].name;
+      } else if (activeProduct.colors.length > 1 && !colorSelect.value) {
+        status.textContent = 'Please select a color before adding this product to your cart.';
+        return;
+      }
+      if (activeProduct.sizes.length > 0 && !sizeSelect.value) {
+        status.textContent = 'Please select a size before adding this product to your cart.';
+        return;
+      }
       submitButton.disabled = true;
       try {
         const response = await fetch(form.dataset.addUrl, {
