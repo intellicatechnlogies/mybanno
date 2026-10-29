@@ -4,7 +4,7 @@ __pycache__/
 # staticfiles/
 store.db
 *.db
-# email.json
+#email.json
 # e-mail.json
 .env
 .product-name-catalog.json

@@ -8,6 +8,8 @@ import tempfile
 import threading
 import zipfile
 import time
+import os
+import datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -15,7 +17,8 @@ from django.conf import settings
 
 
 SUBJECT = "Mybanno - Email backup"
-INTERVAL_SECONDS = 10 * 60
+DEFAULT_INTERVAL_SECONDS = 10 * 60
+DEFAULT_MAX_PART_BYTES = 18 * 1024 * 1024
 _worker_started = False
 logger = logging.getLogger(__name__)
 
@@ -73,24 +76,44 @@ def send_database_backup(config=None):
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
             archive.write(backup_path, arcname="store.db")
 
-        message = EmailMessage()
-        message["From"] = config["email"]
-        message["To"] = config["email"]
-        message["Subject"] = SUBJECT
-        message.set_content("Automated Mybanno store.db backup.")
-        message.add_attachment(
-            zip_path.read_bytes(),
-            maintype="application",
-            subtype="zip",
-            filename="store.db.zip",
+        backup_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+        max_part_bytes = int(
+            os.environ.get("MYBANNO_BACKUP_MAX_PART_BYTES", DEFAULT_MAX_PART_BYTES)
         )
+        zip_size = zip_path.stat().st_size
+        part_count = max(1, (zip_size + max_part_bytes - 1) // max_part_bytes)
 
-        with smtplib.SMTP(config["smtp_server"], config["port"], timeout=300) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(config["email"], config["password"])
-            smtp.send_message(message)
+        with zip_path.open("rb") as archive_file:
+            for part_number in range(1, part_count + 1):
+                archive_chunk = archive_file.read(max_part_bytes)
+                if not archive_chunk:
+                    break
+
+                message = EmailMessage()
+                message["From"] = config["email"]
+                message["To"] = config["email"]
+                message["Subject"] = (
+                    f"{SUBJECT} [{backup_id}] part {part_number} of {part_count}"
+                )
+                message.set_content(
+                    "Automated Mybanno store.db backup.\n"
+                    f"This email contains part {part_number} of {part_count}. "
+                    "Concatenate the .zip.* files in order and unzip the result."
+                )
+                extension = "zip" if part_count == 1 else f"zip.{part_number:03d}"
+                message.add_attachment(
+                    archive_chunk,
+                    maintype="application",
+                    subtype="zip",
+                    filename=f"store.db.{extension}",
+                )
+
+                with smtplib.SMTP(config["smtp_server"], config["port"], timeout=300) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.ehlo()
+                    smtp.login(config["email"], config["password"])
+                    smtp.send_message(message)
 
         try:
             keep_only_latest_backup(config)
@@ -121,10 +144,25 @@ def keep_only_latest_backup(config=None):
             if status != "OK" or not data or not data[0]:
                 continue
 
-            uids = sorted((int(uid) for uid in data[0].decode("ascii").split()), reverse=True)
-            for uid in uids[1:]:
-                imap.uid("store", str(uid), "+FLAGS", "\\Deleted")
-            if len(uids) > 1:
+            backup_ids = {}
+            for uid_bytes in data[0].split():
+                uid = uid_bytes.decode("ascii")
+                fetch_status, fetch_data = imap.uid("fetch", uid, "(RFC822.HEADER)")
+                if fetch_status != "OK" or not fetch_data or not fetch_data[0]:
+                    continue
+                header = fetch_data[0][1] if isinstance(fetch_data[0], tuple) else fetch_data[0]
+                header_text = header.decode("utf-8", errors="replace")
+                match = re.search(r"\bMybanno - Email backup \[([0-9]{14})\]", header_text)
+                if match:
+                    backup_ids.setdefault(match.group(1), []).append(uid)
+
+            if len(backup_ids) > 1:
+                latest_backup_id = max(backup_ids)
+                for backup_id, old_uids in backup_ids.items():
+                    if backup_id == latest_backup_id:
+                        continue
+                    for uid in old_uids:
+                        imap.uid("store", uid, "+FLAGS", "\\Deleted")
                 imap.expunge()
 
 
@@ -157,7 +195,13 @@ def start_backup_worker():
                 send_database_backup()
             except Exception as exc:
                 logger.exception("Database email backup failed: %s", exc)
-            time.sleep(INTERVAL_SECONDS)
+            interval = int(
+                os.environ.get(
+                    "MYBANNO_BACKUP_INTERVAL_SECONDS",
+                    DEFAULT_INTERVAL_SECONDS,
+                )
+            )
+            time.sleep(interval)
 
     thread = threading.Thread(target=run, name="mybanno-db-backup", daemon=True)
     thread.start()

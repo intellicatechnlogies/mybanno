@@ -32,7 +32,7 @@ Send one backup now with:
 .venv\Scripts\python.exe manage.py backup_store_db
 ```
 
-The command creates a consistent SQLite snapshot, emails it from and to the configured address with subject `Mybanno - Email backup`, and removes older messages with that subject. Django also starts a background Python worker when the development server is launched with `py manage.py runserver`; it sends immediately and every 10 minutes while the server remains running. It uses only Python's standard library plus Django and does not require Task Scheduler or another scheduling service.
+The command creates a consistent SQLite snapshot and emails it from and to the configured address. Django also starts a background worker for `runserver` and production WSGI startup. It sends immediately and every 10 minutes by default. Set `MYBANNO_BACKUP_INTERVAL_SECONDS` to change the interval, or set `MYBANNO_DISABLE_EMAIL_BACKUP=1` to disable it. Backups larger than Gmail's attachment limit are split into 18 MB email parts automatically. Management commands, migrations, and static collection do not start the worker.
 
 The existing `store.db` database is retained. The first migration copies existing products and admin accounts into Django-managed tables without deleting the original tables. Existing Werkzeug password hashes are accepted at sign-in and upgraded to Django's password hash format after a successful login. The local admin account uses username `test` and password `test`; the password is stored as a secure hash, not as plaintext. Change it before deployment.
 
