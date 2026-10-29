@@ -3,6 +3,9 @@ __pycache__/
 .venv/
 # staticfiles/
 store.db
+*.db
+# email.json
+# e-mail.json
 .env
 .product-name-catalog.json
 .product-name-catalog.json.tmp
