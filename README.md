@@ -13,27 +13,6 @@ A Django and SQLite clothing catalog. Visitors can search, filter, and browse pr
 
 For deployment, collect static assets into `staticfiles/` with `py manage.py collectstatic`. Django writes this directory using the `STATIC_ROOT` setting.
 
-## Email database backups on Windows
-
-Create `.venv` and install dependencies first. Then keep the Gmail SMTP/IMAP account details in `email.json` (this file is intentionally ignored by Git):
-
-```json
-{
-  "App_Password": "your-gmail-app-password",
-  "SMTP_Server": "smtp.gmail.com",
-  "Port": 587,
-  "Email": "your-address@gmail.com"
-}
-```
-
-Send one backup now with:
-
-```powershell
-.venv\Scripts\python.exe manage.py backup_store_db
-```
-
-The command creates a consistent SQLite snapshot and emails it from and to the configured address. Django also starts a background worker for `runserver` and production WSGI startup. It sends immediately and every 10 minutes by default. Set `MYBANNO_BACKUP_INTERVAL_SECONDS` to change the interval, or set `MYBANNO_DISABLE_EMAIL_BACKUP=1` to disable it. Backups larger than Gmail's attachment limit are split into 18 MB email parts automatically. Management commands, migrations, and static collection do not start the worker.
-
 The existing `store.db` database is retained. The first migration copies existing products and admin accounts into Django-managed tables without deleting the original tables. Existing Werkzeug password hashes are accepted at sign-in and upgraded to Django's password hash format after a successful login. The local admin account uses username `test` and password `test`; the password is stored as a secure hash, not as plaintext. Change it before deployment.
 
 Product photos and videos are stored in the SQLite database as base64 data URLs. Admins can upload multiple JPEG, PNG, or WebP photos and MP4, WebM, or MOV videos for each product. Each file is limited to 5 MB. Existing product photos remain in the database.
