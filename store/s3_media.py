@@ -78,7 +78,10 @@ def extract_s3_key(data_url, bucket):
 def display_media_url(data_url):
     if not data_url or data_url.startswith("data:"):
         return data_url
-    config = load_media_config()
+    try:
+        config = load_media_config()
+    except MediaStorageError:
+        return data_url
     key = extract_s3_key(data_url, config["bucket"])
     if not key:
         return data_url
