@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}{{ product.name }} · Mybanno{% endblock %}
+{% block head %}
+	{% for media in gallery_items %}
+		<link rel="preload" href="{{ media.data_url }}" as="{% if media.media_type == 'video' %}video{% else %}image{% endif %}">
+	{% endfor %}
+{% endblock %}
 {% block content %}
 <div class="container product-detail-page">
 	<nav class="breadcrumb" aria-label="Breadcrumb"><a href="{% url 'index' %}">Shop</a><span aria-hidden="true">/</span><span>{{ product.category }}</span><span aria-hidden="true">/</span><span>{{ product.name }}</span></nav>
@@ -12,7 +17,7 @@
 						<video id="detail-main-video" class="detail-main-media" src="{{ media.data_url }}" controls playsinline preload="metadata" aria-label="{{ product.name }} video"></video>
 						<img id="detail-main-image" class="detail-main-media" alt="{{ product.name }}" hidden>
 					{% elif media.data_url %}
-						<img id="detail-main-image" class="detail-main-media" src="{{ media.data_url }}" alt="{{ product.name }}">
+						<img id="detail-main-image" class="detail-main-media" src="{{ media.data_url }}" alt="{{ product.name }}" loading="eager" decoding="async" fetchpriority="high">
 						<video id="detail-main-video" class="detail-main-media" controls playsinline preload="metadata" aria-label="{{ product.name }} video" hidden></video>
 					{% else %}
 						<div class="detail-image-placeholder">Mybanno</div>
@@ -52,5 +57,5 @@
 	<button class="product-image-lightbox-close" type="button" aria-label="Close full image">&times;</button>
 	<img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
 </dialog>
-<script src="{% static 'product-detail.js' %}?v=3" defer></script>
+<script src="{% static 'product-detail.js' %}?v=4" defer></script>
 {% endblock %}

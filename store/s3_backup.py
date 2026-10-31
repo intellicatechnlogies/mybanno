@@ -1,19 +1,20 @@
 import datetime
-import json
 import logging
 import sqlite3
 import tempfile
 import threading
 import time
 import os
+import sys
 from pathlib import Path
 
 import boto3
 from django.conf import settings
+from .aws_credentials import AwsCredentialsError, load_backup_aws_config
 
 
-DEFAULT_INTERVAL_SECONDS = 10 * 60
-BACKUP_RETENTION_COUNT = 3
+DEFAULT_INTERVAL_SECONDS = 6 * 60 * 60
+BACKUP_RETENTION_HOURS = 48
 _worker_started = False
 logger = logging.getLogger(__name__)
 
@@ -23,35 +24,27 @@ class BackupError(RuntimeError):
 
 
 def load_config(config_path=None):
-    path = Path(config_path or settings.BASE_DIR / "aws.json")
-    if not path.exists():
-        raise BackupError(f"AWS configuration not found: {path}")
-
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise BackupError(f"Invalid JSON in {path}: {exc}") from exc
-
-    access_key = (data.get("Access_key_ID") or "").strip()
-    secret_key = (data.get("Secret_Access_Key") or "").strip()
-    region = (data.get("Region") or "").strip()
-    bucket = (data.get("Bucket") or "").strip()
-
-    if not all((access_key, secret_key, region, bucket)):
-        raise BackupError(
-            "aws.json must contain Access_key_ID, Secret_Access_Key, Region, and Bucket"
-        )
-
-    return {
-        "access_key": access_key,
-        "secret_key": secret_key,
-        "region": region,
-        "bucket": bucket,
-    }
+        return load_backup_aws_config()
+    except AwsCredentialsError as exc:
+        raise BackupError(str(exc)) from exc
 
 
-def upload_database_backup(config=None, enforce_interval=False):
+def get_backup_source():
+    source = os.environ.get("MYBANNO_BACKUP_SOURCE", "").strip().lower()
+    if source in {"local", "server", "test", "production"}:
+        if source == "production":
+            return "server"
+        return source
+    if "runserver" in sys.argv:
+        return "local"
+    return "server"
+
+
+def upload_database_backup(config=None, enforce_interval=False, source=None):
     config = config or load_config()
+    source = source or get_backup_source()
+    lock_key = None
     db_path = Path(settings.DATABASES["default"]["NAME"])
     if not db_path.exists():
         raise BackupError(f"Database not found: {db_path}")
@@ -70,7 +63,10 @@ def upload_database_backup(config=None, enforce_interval=False):
                 DEFAULT_INTERVAL_SECONDS,
             )
         )
-        latest_backup = get_latest_backup(s3, config["bucket"])
+        lock_key = acquire_backup_lock(s3, config["bucket"], source)
+        if lock_key is None:
+            return None
+        latest_backup = get_latest_backup(s3, config["bucket"], source)
         if latest_backup is not None:
             age_seconds = (
                 datetime.datetime.now(datetime.timezone.utc)
@@ -83,18 +79,18 @@ def upload_database_backup(config=None, enforce_interval=False):
         backup_path = Path(temp.name)
 
     try:
-        source = sqlite3.connect(str(db_path))
+        source_db = sqlite3.connect(str(db_path))
         destination = sqlite3.connect(str(backup_path))
         try:
-            source.backup(destination)
+            source_db.backup(destination)
         finally:
             destination.close()
-            source.close()
+            source_db.close()
 
         timestamp = datetime.datetime.now(datetime.timezone.utc).strftime(
             "%Y%m%d-%H%M%S-%f"
         )
-        timestamped_key = f"backups/store.db-{timestamp}.db"
+        timestamped_key = f"backups/{source}/store.db-{timestamp}.db"
 
         s3.upload_file(str(backup_path), config["bucket"], timestamped_key)
         delete_old_backups(s3, config["bucket"])
@@ -102,12 +98,18 @@ def upload_database_backup(config=None, enforce_interval=False):
         return timestamped_key
     finally:
         backup_path.unlink(missing_ok=True)
+        if lock_key:
+            try:
+                s3.delete_object(Bucket=config["bucket"], Key=lock_key)
+            except Exception as exc:
+                logger.warning("Could not release S3 backup lock: %s", exc)
 
 
-def get_latest_backup(s3, bucket):
+def get_latest_backup(s3, bucket, source=None):
+    source = source or get_backup_source()
     paginator = s3.get_paginator("list_objects_v2")
     newest = None
-    for page in paginator.paginate(Bucket=bucket, Prefix="backups/store.db-"):
+    for page in paginator.paginate(Bucket=bucket, Prefix=f"backups/{source}/store.db-"):
         for item in page.get("Contents", []):
             if newest is None or item["LastModified"] > newest["LastModified"]:
                 newest = item
@@ -116,23 +118,19 @@ def get_latest_backup(s3, bucket):
 
 def delete_old_backups(s3, bucket):
     paginator = s3.get_paginator("list_objects_v2")
-    pages = paginator.paginate(Bucket=bucket, Prefix="backups/store.db-")
+    pages = paginator.paginate(Bucket=bucket, Prefix="backups/")
     objects = []
     for page in pages:
         objects.extend(page.get("Contents", []))
 
-    objects.sort(key=lambda item: item["LastModified"], reverse=True)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        hours=BACKUP_RETENTION_HOURS
+    )
     obsolete_keys = [
         {"Key": item["Key"]}
-        for item in objects[BACKUP_RETENTION_COUNT:]
+        for item in objects
+        if item["LastModified"] < cutoff and item["Key"].endswith(".db")
     ]
-
-    for prefix in ("latest/store.db", "latest/"):
-        latest_objects = s3.list_objects_v2(
-            Bucket=bucket,
-            Prefix=prefix,
-        ).get("Contents", [])
-        obsolete_keys.extend({"Key": item["Key"]} for item in latest_objects)
 
     unique_keys = {item["Key"]: item for item in obsolete_keys}
     if unique_keys:
@@ -142,7 +140,49 @@ def delete_old_backups(s3, bucket):
         )
 
 
-def start_backup_worker():
+def acquire_backup_lock(s3, bucket, source):
+    interval = int(
+        os.environ.get(
+            "MYBANNO_S3_BACKUP_INTERVAL_SECONDS",
+            DEFAULT_INTERVAL_SECONDS,
+        )
+    )
+    lock_key = f"backups/.locks/{source}.lock"
+
+    try:
+        s3.put_object(
+            Bucket=bucket,
+            Key=lock_key,
+            Body=f"{source}:{os.getpid()}:{time.time()}".encode("ascii"),
+            IfNoneMatch="*",
+        )
+        return lock_key
+    except Exception as exc:
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+        status = getattr(exc, "response", {}).get("ResponseMetadata", {}).get(
+            "HTTPStatusCode"
+        )
+        if error_code not in {"PreconditionFailed", "ConditionalRequestConflict"} and status != 412:
+            raise
+
+        try:
+            lock = s3.head_object(Bucket=bucket, Key=lock_key)
+        except s3.exceptions.NoSuchKey:
+            return acquire_backup_lock(s3, bucket, source)
+
+        lock_modified = lock["LastModified"]
+        if lock_modified.tzinfo is None:
+            lock_modified = lock_modified.replace(tzinfo=datetime.timezone.utc)
+        lock_age = (
+            datetime.datetime.now(datetime.timezone.utc) - lock_modified
+        ).total_seconds()
+        if lock_age >= interval * 2:
+            s3.delete_object(Bucket=bucket, Key=lock_key)
+            return acquire_backup_lock(s3, bucket, source)
+        return None
+
+
+def start_backup_worker(source=None):
     global _worker_started
     if _worker_started:
         return
@@ -151,7 +191,10 @@ def start_backup_worker():
     def run():
         while True:
             try:
-                key = upload_database_backup(enforce_interval=True)
+                key = upload_database_backup(
+                    enforce_interval=True,
+                    source=source,
+                )
                 if key:
                     logger.info("S3 database backup uploaded: %s", key)
             except Exception as exc:

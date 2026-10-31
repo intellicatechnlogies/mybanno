@@ -1,10 +1,20 @@
 import os
+import base64
+import hashlib
 from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-development-secret")
+CREDENTIAL_API_KEY = os.environ.get(
+    "CREDENTIAL_API_KEY",
+    "mybanno-default-api-key-change-in-production",
+)
+CREDENTIAL_ENCRYPTION_KEY = os.environ.get(
+    "CREDENTIAL_ENCRYPTION_KEY",
+    base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest()).decode(),
+)
 DEBUG = False
 ALLOWED_HOSTS = ["*"]
 

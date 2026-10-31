@@ -53,6 +53,20 @@
     let activeIndex = 0;
     let requestId = 0;
     let activeProduct = null;
+    const modalImageCache = new Map();
+
+    const preloadModalImages = () => {
+      mediaItems.forEach((media) => {
+        if (media.type !== 'image') return;
+        const source = media.thumbnail || media.src;
+        if (!source || modalImageCache.has(source)) return;
+        const image = new Image();
+        image.decoding = 'async';
+        image.loading = 'eager';
+        image.src = source;
+        modalImageCache.set(source, image);
+      });
+    };
 
     const showMedia = (index) => {
       activeIndex = mediaItems.length ? (index + mediaItems.length) % mediaItems.length : 0;
@@ -79,7 +93,9 @@
       } else if (media) {
         modalVideo.hidden = true;
         modalImage.hidden = false;
-        modalImage.src = media.src;
+        modalImage.src = media.thumbnail || media.src;
+        modalImage.decoding = 'async';
+        modalImage.loading = 'eager';
         modalImage.alt = `${modal.querySelector('#modal-product-name').textContent} photo`;
       } else {
         modalVideo.hidden = true;
@@ -248,6 +264,12 @@
       mediaItems = product.media;
       syncSelectedSize();
       showMedia(0);
+      preloadModalImages();
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(preloadModalImages, { timeout: 250 });
+      } else {
+        window.setTimeout(preloadModalImages, 50);
+      }
     };
 
     const closeModal = () => {
@@ -305,7 +327,10 @@
     const openFullImage = () => {
       if (!imageLightbox || modalImage.hidden) return;
       const image = imageLightbox.querySelector('.product-image-lightbox-photo');
-      image.src = modalImage.src;
+      const activeMedia = mediaItems[activeIndex];
+      image.src = activeMedia && activeMedia.type === 'image'
+        ? activeMedia.src
+        : modalImage.src;
       image.alt = modalImage.alt;
       imageLightbox.showModal();
     };

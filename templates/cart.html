@@ -10,7 +10,7 @@
         {% for item in items %}
         <article class="cart-item">
           {% if item.media %}
-            {% if item.media.media_type == 'video' %}<video src="{{ item.media.data_url }}" muted preload="metadata"></video>{% else %}<img src="{{ item.media.data_url }}" alt="{{ item.product.name }}">{% endif %}
+            {% if item.media.media_type == 'video' %}<video src="{{ item.media.data_url }}" muted preload="metadata"></video>{% else %}<img src="{{ item.media.data_url }}" alt="{{ item.product.name }}" loading="lazy" decoding="async">{% endif %}
           {% else %}<div class="cart-item-placeholder">Mybanno</div>{% endif %}
           <div class="cart-item-details">
             <h2>{{ item.product.name }}</h2>

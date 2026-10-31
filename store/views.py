@@ -1,17 +1,25 @@
 from decimal import Decimal, InvalidOperation
 from functools import wraps
+import hashlib
+import hmac
+import json
 import time
+from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.db.models import BooleanField, DecimalField, Q
 from django.db.models.expressions import RawSQL
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.core.paginator import Paginator
+from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from werkzeug.security import check_password_hash as check_legacy_password_hash
 
@@ -23,10 +31,137 @@ from .forms import (
     OrderUpdateForm,
     ProductForm,
 )
-from .models import AdminAccount, Product, ShopOrder, ShopOrderItem
+from .models import AdminAccount, Credential, Product, ShopOrder, ShopOrderItem
 from .product_names import product_name_options, remove_product_name_option
+from .s3_media import delete_media_url, get_media_s3_client, load_media_config
 
-PRODUCT_BATCH_SIZE = 5
+PRODUCT_BATCH_SIZE = 50
+
+
+@csrf_exempt
+@require_POST
+def add_credential(request):
+    supplied_key = request.headers.get("X-API-Key", "")
+    default_key = getattr(settings, "CREDENTIAL_API_KEY", "")
+    if not supplied_key or not default_key or not hmac.compare_digest(supplied_key, default_key):
+        return JsonResponse({"error": "Invalid or missing API key."}, status=401)
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Request body must be valid JSON."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "Request body must be a JSON object."}, status=400)
+
+    service = str(payload.get("service", "")).strip()
+    account = str(payload.get("account", "")).strip()
+    credential_type = str(payload.get("credential_type", "")).strip()
+    description = str(payload.get("description", "")).strip()
+    plain_value = payload.get("value")
+
+    if not service:
+        return JsonResponse({"error": "service is required."}, status=400)
+    if plain_value is None or not str(plain_value).strip():
+        return JsonResponse({"error": "value is required."}, status=400)
+    if len(service) > 100 or len(account) > 150 or len(credential_type) > 100 or len(description) > 500:
+        return JsonResponse({"error": "One or more text fields exceed the allowed length."}, status=400)
+
+    credential = Credential.objects.filter(
+        service=service,
+        account=account,
+        credential_type=credential_type,
+    ).first()
+    created = credential is None
+    if not created:
+        credential.description = description
+    else:
+        credential = Credential(
+            service=service,
+            account=account,
+            credential_type=credential_type,
+            description=description,
+        )
+    credential.set_plain_value(str(plain_value))
+    credential.updated_at = timezone.now()
+    credential.save(update_fields=["encrypted_value", "description", "updated_at"] if not created else None)
+
+    return JsonResponse(
+        {
+            "id": credential.pk,
+            "service": credential.service,
+            "account": credential.account,
+            "credential_type": credential.credential_type,
+            "description": credential.description,
+            "created": created,
+            "value": "encrypted",
+        },
+        status=201 if created else 200,
+    )
+
+
+def cached_thumbnail(request, key):
+    normalized_key = str(key).replace("\\", "").strip("/")
+    if not normalized_key.startswith("products/") or not normalized_key.endswith(".webp"):
+        return HttpResponse("Invalid thumbnail path.", status=400)
+    if "/thumbnails/" not in normalized_key:
+        return HttpResponse("Invalid thumbnail path.", status=400)
+
+    cache_dir = Path(settings.BASE_DIR) / ".media-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_name = hashlib.sha256(normalized_key.encode("utf-8")).hexdigest() + ".webp"
+    cache_path = cache_dir / cache_name
+
+    if not cache_path.exists():
+        try:
+            config = load_media_config()
+            response = get_media_s3_client(config).get_object(
+                Bucket=config["bucket"],
+                Key=normalized_key,
+            )
+            content = response["Body"].read()
+            if not content:
+                return HttpResponse("Thumbnail is empty.", status=404)
+            temp_path = cache_path.with_suffix(".tmp")
+            temp_path.write_bytes(content)
+            temp_path.replace(cache_path)
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+            if error_code in ("NoSuchKey", "NotFound", "404"):
+                return HttpResponse("Thumbnail not found.", status=404)
+            return HttpResponse("Could not load thumbnail.", status=502)
+
+    response = FileResponse(cache_path.open("rb"), content_type="image/webp")
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    response["ETag"] = '"' + hashlib.sha256(normalized_key.encode("utf-8")).hexdigest()[:16] + '"'
+    if request.method == "HEAD":
+        response.close()
+        return HttpResponse(
+            status=200,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Type": "image/webp",
+                "Content-Length": str(cache_path.stat().st_size),
+                "ETag": '"' + hashlib.sha256(normalized_key.encode("utf-8")).hexdigest()[:16] + '"',
+            },
+        )
+    return response
+
+
+def serve_s3_media(request, key):
+    if request.method not in ("GET", "HEAD"):
+        return HttpResponse(status=405)
+    normalized_key = str(key).replace("\\", "").strip("/")
+    if not normalized_key.startswith(("products/", "images/", "videos/")):
+        return HttpResponse("Invalid media path.", status=400)
+    config = load_media_config()
+    signed_url = get_media_s3_client(config).generate_presigned_url(
+        "get_object",
+        Params={"Bucket": config["bucket"], "Key": normalized_key},
+        ExpiresIn=24 * 60 * 60,
+    )
+    response = HttpResponseRedirect(signed_url)
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 def admin_required(view):
@@ -261,6 +396,7 @@ def product_modal_data(request, product_id):
                 {
                     "type": media["media_type"],
                     "src": media["data_url"],
+                    "thumbnail": media["thumbnail_url"],
                     "color": media["color"],
                 }
                 for media in product.gallery_items
@@ -864,6 +1000,13 @@ def edit_product(request, product_id):
 def delete_product(request, product_id):
     if request.method != "POST":
         return HttpResponse(status=405)
-    get_object_or_404(Product, pk=product_id).delete()
+    product = get_object_or_404(
+        Product.objects.prefetch_related("media_items"),
+        pk=product_id,
+    )
+    delete_media_url(product.image_data)
+    for media in product.media_items.all():
+        delete_media_url(media.data_url)
+    product.delete()
     messages.success(request, "Product deleted.")
     return redirect("admin_dashboard")

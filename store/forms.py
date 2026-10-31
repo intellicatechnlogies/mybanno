@@ -1,4 +1,3 @@
-import base64
 import re
 
 from django import forms
@@ -7,6 +6,7 @@ from django.utils import timezone
 
 from .models import Product, ProductMedia, ShopOrder
 from .product_names import product_name_options
+from .s3_media import upload_media, delete_media_url
 
 DEFAULT_PRODUCT_NAMES = ["Linen Day Shirt", "Relaxed Cotton Tee", "Everyday Kurta", "Classic Overshirt"]
 DEFAULT_CLOTH_TYPES = ["Linen", "Cotton", "Silk", "Denim", "Khadi", "Wool", "Rayon"]
@@ -404,9 +404,12 @@ class ProductForm(forms.Form):
             media.color = media_color if media_color in data["colors"] else ""
             media.save(update_fields=["color"])
         for uploaded_file, image_color in zip(data["images"], data["image_colors"]):
-            data_url = (
-                f"data:{uploaded_file.content_type};"
-                f"base64,{base64.b64encode(uploaded_file.read()).decode('ascii')}"
+            data_url, _ = upload_media(
+                product.pk,
+                ProductMedia.IMAGE,
+                uploaded_file.name,
+                uploaded_file.content_type,
+                uploaded_file.read(),
             )
             ProductMedia.objects.create(
                 product=product,
@@ -418,9 +421,12 @@ class ProductForm(forms.Form):
             )
             sort_order += 1
         for uploaded_file in data["videos"]:
-            data_url = (
-                f"data:{uploaded_file.content_type};"
-                f"base64,{base64.b64encode(uploaded_file.read()).decode('ascii')}"
+            data_url, _ = upload_media(
+                product.pk,
+                ProductMedia.VIDEO,
+                uploaded_file.name,
+                uploaded_file.content_type,
+                uploaded_file.read(),
             )
             ProductMedia.objects.create(
                 product=product,
@@ -432,8 +438,12 @@ class ProductForm(forms.Form):
             sort_order += 1
         remove_ids = data["remove_media"]
         if remove_ids:
+            removed_media = list(product.media_items.filter(pk__in=remove_ids))
+            for media in removed_media:
+                delete_media_url(media.data_url)
             product.media_items.filter(pk__in=remove_ids).delete()
         if data["remove_legacy_image"]:
+            delete_media_url(product.image_data)
             product.image_data = None
             product.save(update_fields=["image_data"])
         return product

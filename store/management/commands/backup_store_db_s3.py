@@ -8,11 +8,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--config", default=None)
+        parser.add_argument(
+            "--source",
+            choices=("local", "server", "test", "production"),
+            default=None,
+            help="Label this backup as local, server, test, or production",
+        )
 
     def handle(self, *args, **options):
         try:
             config = load_config(options["config"])
-            key = upload_database_backup(config)
+            source = options["source"]
+            if source == "production":
+                source = "server"
+            key = upload_database_backup(config, source=source)
         except BackupError as exc:
             raise CommandError(str(exc)) from exc
         except Exception as exc:
