@@ -24,3 +24,32 @@ The product-name choices are hardcoded in the product form and do not come from 
 Admins choose sizes from a single horizontal row and select colors from searchable checkboxes within each size. Stock is entered per selected size/color combination, and each size total and product total are calculated automatically from those color quantities. Uploaded photos can optionally be associated with a color so selecting that swatch opens its photo; new uploads offer color associations even when added before choosing inventory variants. Shop and product-modal stock counts subtract quantities already in the visitor's cart, and unavailable color/size choices are disabled or hidden. Cart and order details show the swatch and color name, with the chosen color and size saved on each order item.
 
 Set a strong `SECRET_KEY`, `DEBUG=False`, and suitable `ALLOWED_HOSTS` values before deploying publicly.
+
+## AWS S3 database backups
+
+Keep AWS credentials and bucket settings in `aws.json`:
+
+```json
+{
+  "Access_key_ID": "your-access-key-id",
+  "Secret_Access_Key": "your-secret-access-key",
+  "Region": "ap-southeast-2",
+  "Bucket": "your-bucket-name"
+}
+```
+
+`aws.json` is ignored by Git. Upload one backup immediately with:
+
+```powershell
+.venv\Scripts\python.exe manage.py backup_store_db_s3
+```
+
+The application uploads a consistent SQLite snapshot immediately at startup and every 10 minutes. It uploads one complete backup object, with boto3 multipart transfer for large databases:
+
+- `backups/store.db-YYYYMMDD-HHMMSS.db`
+
+Each backup cycle uploads exactly one database file. Only the newest three timestamped backups are retained; older backups and the former `latest/store.db` copy are deleted from the bucket automatically.
+
+Set `MYBANNO_DISABLE_S3_BACKUP=1` to disable automatic uploads. The worker interval can be changed with `MYBANNO_S3_BACKUP_INTERVAL_SECONDS`.
+
+Automatic workers check the newest existing S3 backup before uploading. If one is less than the configured interval old, the worker skips that cycle. This prevents multiple Django/Gunicorn worker processes from creating extra backups during simultaneous startup. The manual backup command always uploads explicitly and does not apply the automatic cooldown.
