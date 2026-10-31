@@ -5,6 +5,9 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("api/credentials", views.add_credential, name="add_credential"),
+    path("media-cache/<path:key>", views.cached_thumbnail, name="cached_thumbnail"),
+    path("media/<path:key>", views.serve_s3_media, name="serve_s3_media"),
     path("products/more", views.more_products, name="more_products"),
     path("products/<int:product_id>/", views.product_detail, name="product_detail"),
     path("products/<int:product_id>/modal", views.product_modal_data, name="product_modal_data"),

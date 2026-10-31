@@ -1,5 +1,7 @@
 import time
 import base64
+import json
+from unittest.mock import patch
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -11,7 +13,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import DEFAULT_PRODUCT_NAMES, ProductForm
-from .models import AdminAccount, Product, ProductMedia, ShopOrder, ShopOrderItem
+from .models import AdminAccount, Credential, Product, ProductMedia, ShopOrder, ShopOrderItem
+from .s3_media import extract_s3_key, delete_media_url
 
 
 class StorefrontTests(TestCase):
@@ -45,6 +48,69 @@ class StorefrontTests(TestCase):
             actual_price="100.00",
             stock=0,
             sizes="Free Size",
+        )
+
+    def test_s3_media_url_formats_extract_the_object_key(self):
+        self.assertEqual(
+            extract_s3_key(
+                "https://mybannocloth.s3.amazonaws.com/products/169/images/front.jpg",
+                "mybannocloth",
+            ),
+            "products/169/images/front.jpg",
+        )
+        self.assertEqual(
+            extract_s3_key(
+                "https://mybannocloth.s3.ap-south-1.amazonaws.com/products/169/videos/demo.mp4",
+                "mybannocloth",
+            ),
+            "products/169/videos/demo.mp4",
+        )
+        self.assertEqual(
+            extract_s3_key(
+                "https://s3.ap-south-1.amazonaws.com/mybannocloth/products/169/images/front.jpg",
+                "mybannocloth",
+            ),
+            "products/169/images/front.jpg",
+        )
+
+    @patch("store.s3_media.get_media_s3_client")
+    @patch("store.s3_media.load_media_config")
+    def test_delete_media_url_removes_original_and_thumbnail(self, load_config, get_client):
+        load_config.return_value = {"bucket": "mybannocloth"}
+        delete_media_url(
+            "https://mybannocloth.s3.amazonaws.com/products/169/images/front.jpg"
+        )
+        self.assertEqual(
+            get_client.return_value.delete_object.call_count,
+            2,
+        )
+        get_client.return_value.delete_object.assert_any_call(
+            Bucket="mybannocloth",
+            Key="products/169/images/front.jpg",
+        )
+        get_client.return_value.delete_object.assert_any_call(
+            Bucket="mybannocloth",
+            Key="products/169/thumbnails/front.webp",
+        )
+
+    @patch("store.views.get_media_s3_client")
+    @patch("store.views.load_media_config")
+    def test_s3_media_proxy_redirects_to_signed_url(self, load_config, get_client):
+        load_config.return_value = {"bucket": "mybannocloth", "region": "ap-south-1"}
+        get_client.return_value.generate_presigned_url.return_value = (
+            "https://mybannocloth.s3.amazonaws.com/products/169/images/front.jpg?signature=test"
+        )
+
+        response = self.client.get(
+            reverse("serve_s3_media", args=["products/169/images/front.jpg"])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("mybannocloth.s3.amazonaws.com", response["Location"])
+        get_client.return_value.generate_presigned_url.assert_called_once_with(
+            "get_object",
+            Params={"Bucket": "mybannocloth", "Key": "products/169/images/front.jpg"},
+            ExpiresIn=24 * 60 * 60,
         )
 
     def checkout_details(self, **overrides):
@@ -300,14 +366,14 @@ class StorefrontTests(TestCase):
         ProductMedia.objects.create(
             product=self.first_product,
             media_type=ProductMedia.IMAGE,
-            data_url="data:image/png;base64,aW1hZ2U=",
+            data_url="https://example.com/products/front.png",
             filename="front.png",
             sort_order=0,
         )
         ProductMedia.objects.create(
             product=self.first_product,
             media_type=ProductMedia.VIDEO,
-            data_url="data:video/mp4;base64,dmlkZW8=",
+            data_url="https://example.com/products/walkthrough.mp4",
             filename="walkthrough.mp4",
             sort_order=1,
         )
@@ -345,8 +411,8 @@ class StorefrontTests(TestCase):
         detail_response = self.client.get(reverse("product_detail", args=[self.first_product.pk]))
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Linen Shirt")
-        self.assertContains(detail_response, "data:image/png;base64,aW1hZ2U=")
-        self.assertContains(detail_response, "data:video/mp4;base64,dmlkZW8=")
+        self.assertContains(detail_response, "https://example.com/products/front.png")
+        self.assertContains(detail_response, "https://example.com/products/walkthrough.mp4")
         self.assertContains(detail_response, "detail-main-video")
         self.assertContains(detail_response, 'aria-label="Previous photo or video"')
         self.assertContains(detail_response, 'aria-label="Next photo or video"')
@@ -695,7 +761,21 @@ class StorefrontTests(TestCase):
         response = self.client.get(reverse("product_detail", args=[999999]))
         self.assertEqual(response.status_code, 404)
 
-    def test_admin_login_product_creation_and_delete(self):
+    @patch("store.views.delete_media_url")
+    @patch("store.forms.delete_media_url")
+    @patch(
+        "store.forms.upload_media",
+        side_effect=lambda product_id, media_type, filename, content_type, content: (
+            f"https://mybannocloth.s3.ap-southeast-2.amazonaws.com/products/{product_id}/{media_type}s/{filename}",
+            f"products/{product_id}/{media_type}s/{filename}",
+        ),
+    )
+    def test_admin_login_product_creation_and_delete(
+        self,
+        mock_upload_media,
+        mock_delete_form_media,
+        mock_delete_view_media,
+    ):
         AdminAccount.objects.create(
             username="manager",
             password_hash=make_password("secure-password"),
@@ -771,8 +851,10 @@ class StorefrontTests(TestCase):
         )
         first_image = product.media_items.filter(media_type="image").first()
         first_video = product.media_items.filter(media_type="video").get()
-        self.assertEqual(base64.b64decode(first_image.data_url.partition(",")[2]), b"test image")
-        self.assertEqual(base64.b64decode(first_video.data_url.partition(",")[2]), b"test video")
+        self.assertIn("/images/", first_image.data_url)
+        self.assertIn("/videos/", first_video.data_url)
+        self.assertTrue(first_image.data_url.startswith("https://mybannocloth.s3."))
+        self.assertTrue(first_video.data_url.startswith("https://mybannocloth.s3."))
 
         response = self.client.get(reverse("index"), {"q": "New Shirt"})
         self.assertContains(response, reverse("product_detail", args=[product.pk]))
@@ -978,3 +1060,27 @@ class StorefrontTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Total stock across colors and sizes must be at least 1.")
         self.assertFalse(Product.objects.filter(name="No Stock Product").exists())
+
+    @override_settings(CREDENTIAL_API_KEY="test-api-key")
+    def test_add_credential_api_encrypts_value(self):
+        response = self.client.post(
+            reverse("add_credential"),
+            data=json.dumps({
+                "service": "AWS",
+                "account": "production",
+                "credential_type": "secret_access_key",
+                "description": "S3 secret key",
+                "value": "plain-secret-value",
+            }),
+            content_type="application/json",
+            HTTP_X_API_KEY="test-api-key",
+        )
+        self.assertEqual(response.status_code, 201)
+        credential = Credential.objects.get(
+            service="AWS",
+            account="production",
+            credential_type="secret_access_key",
+        )
+        self.assertEqual(credential.plain_value, "plain-secret-value")
+        self.assertNotEqual(bytes(credential.encrypted_value), b"plain-secret-value")
+        self.assertNotIn("plain-secret-value", response.content.decode())

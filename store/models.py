@@ -2,13 +2,15 @@ from django.db import models
 from django.utils import timezone
 from decimal import Decimal
 import re
+from .s3_media import display_media_url, thumbnail_media_url
+from .credential_crypto import decrypt_credential_value, encrypt_credential_value
 
 
 class Product(models.Model):
     name = models.CharField(max_length=200)
-    cloth_type = models.CharField(max_length=100)
-    category = models.CharField(max_length=100)
-    occasion_category = models.CharField(max_length=100, blank=True, default="")
+    cloth_type = models.CharField(max_length=100, db_index=True)
+    category = models.CharField(max_length=100, db_index=True)
+    occasion_category = models.CharField(max_length=100, blank=True, default="", db_index=True)
     description = models.TextField(blank=True, default="")
     price = models.DecimalField(max_digits=12, decimal_places=2)
     actual_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -24,8 +26,16 @@ class Product(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
+    def save(self, *args, **kwargs):
+        if isinstance(self.image_data, str) and self.image_data.startswith("data:"):
+            raise ValueError("Base64 product images must be uploaded to S3, not stored in the database.")
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="product_created_idx"),
+        ]
 
     def __str__(self):
         return self.name
@@ -139,7 +149,8 @@ class Product(models.Model):
             items.append({
                 "id": None,
                 "media_type": "image",
-                "data_url": self.image_data,
+                "data_url": display_media_url(self.image_data),
+                "thumbnail_url": thumbnail_media_url(self.image_data),
                 "filename": "Product photo",
                 "color": self.image_color,
                 "is_legacy": True,
@@ -148,7 +159,8 @@ class Product(models.Model):
             {
                 "id": media.pk,
                 "media_type": media.media_type,
-                "data_url": media.data_url,
+                "data_url": display_media_url(media.data_url),
+                "thumbnail_url": thumbnail_media_url(media.data_url),
                 "filename": media.filename,
                 "color": media.color,
                 "is_legacy": False,
@@ -203,9 +215,53 @@ class ProductMedia(models.Model):
 
     class Meta:
         ordering = ["sort_order", "id"]
+        indexes = [
+            models.Index(
+                fields=["product", "media_type", "sort_order"],
+                name="media_product_type_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if isinstance(self.data_url, str) and self.data_url.startswith("data:"):
+            raise ValueError("Base64 product media must be uploaded to S3, not stored in the database.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.product.name}: {self.filename}"
+
+
+class Credential(models.Model):
+    service = models.CharField(max_length=100, db_index=True)
+    account = models.CharField(max_length=150, blank=True, default="")
+    credential_type = models.CharField(max_length=100, blank=True, default="")
+    description = models.CharField(max_length=500, blank=True, default="")
+    encrypted_value = models.BinaryField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["service", "account", "credential_type", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service", "account", "credential_type"],
+                name="credential_unique_entry",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["service", "account"], name="credential_lookup_idx"),
+        ]
+
+    def set_plain_value(self, plain_value):
+        self.encrypted_value = encrypt_credential_value(plain_value)
+
+    @property
+    def plain_value(self):
+        encrypted = bytes(self.encrypted_value) if isinstance(self.encrypted_value, memoryview) else self.encrypted_value
+        return decrypt_credential_value(encrypted)
+
+    def __str__(self):
+        return f"{self.service}: {self.account or self.credential_type or 'credential'}"
 
 
 class ShopOrder(models.Model):
@@ -217,12 +273,15 @@ class ShopOrder(models.Model):
     mobile_number = models.CharField(max_length=24)
     delivery_address = models.TextField(max_length=1000)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_PROGRESS)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_PROGRESS, db_index=True)
     remarks = models.TextField(max_length=2000, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["created_at", "pk"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="order_status_date_idx"),
+        ]
 
     def __str__(self):
         return f"Order #{self.pk}"

@@ -44,12 +44,45 @@ Keep AWS credentials and bucket settings in `aws.json`:
 .venv\Scripts\python.exe manage.py backup_store_db_s3
 ```
 
+For a local/test upload, add an explicit source label:
+
+```powershell
+.venv\Scripts\python.exe manage.py backup_store_db_s3 --source local
+```
+
 The application uploads a consistent SQLite snapshot immediately at startup and every 10 minutes. It uploads one complete backup object, with boto3 multipart transfer for large databases:
 
-- `backups/store.db-YYYYMMDD-HHMMSS.db`
+- Local: `backups/local/store.db-YYYYMMDD-HHMMSS-microseconds.db`
+- Server: `backups/server/store.db-YYYYMMDD-HHMMSS-microseconds.db`
+- Test/other explicit source: `backups/test/store.db-...db`
 
-Each backup cycle uploads exactly one database file. Only the newest three timestamped backups are retained; older backups and the former `latest/store.db` copy are deleted from the bucket automatically.
+Each backup cycle uploads exactly one database file. Backups older than 48 hours are deleted automatically. Local and server backups are stored in separate folders so they are easy to verify.
 
 Set `MYBANNO_DISABLE_S3_BACKUP=1` to disable automatic uploads. The worker interval can be changed with `MYBANNO_S3_BACKUP_INTERVAL_SECONDS`.
 
 Automatic workers check the newest existing S3 backup before uploading. If one is less than the configured interval old, the worker skips that cycle. This prevents multiple Django/Gunicorn worker processes from creating extra backups during simultaneous startup. The manual backup command always uploads explicitly and does not apply the automatic cooldown.
+
+Automatic workers also acquire a short-lived conditional S3 lock before checking the 10-minute schedule. Only one process can create the lock, so another worker cannot run a duplicate backup at startup. The lock is released after the upload or failure.
+
+The AWS IAM identity needs `s3:ListBucket` for the bucket so it can identify and delete database backups older than 48 hours, plus `s3:PutObject` for uploads and `s3:DeleteObject` for retention cleanup.
+
+## Product image and video storage
+
+New product images and videos are uploaded to the `Clothimg_bucket` configured in `aws.json` and stored as S3 URLs in the existing `Product.image_data` and `ProductMedia.data_url` fields:
+
+- Images: `products/<product-id>/images/<unique-file-name>`
+- Videos: `products/<product-id>/videos/<unique-file-name>`
+
+The existing product, color, filename, sort order, and media relationships are not changed.
+
+Preview the base64-to-S3 conversion without changing data:
+
+```powershell
+python manage.py migrate_product_media_to_s3 --dry-run
+```
+
+Run the conversion after configuring valid AWS credentials and S3 permissions:
+
+```powershell
+python manage.py migrate_product_media_to_s3
+```

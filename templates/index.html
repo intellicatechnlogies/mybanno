@@ -27,7 +27,7 @@
     {% include '_product_cards.html' %}
     {% if not products %}<div class="empty"><h3>No pieces found</h3><p>Try a different search or clear your filters.</p></div>{% endif %}
   </div>
-  <div id="product-loader" class="product-loader{% if not has_more %} is-hidden{% endif %}" data-offset="{{ products|length }}" data-batch-size="5" data-more-url="{% url 'more_products' %}" data-has-more="{% if has_more %}1{% else %}0{% endif %}" aria-live="polite">Loading more products…</div>
+  <div id="product-loader" class="product-loader{% if not has_more %} is-hidden{% endif %}" data-offset="{{ products|length }}" data-batch-size="50" data-more-url="{% url 'more_products' %}" data-has-more="{% if has_more %}1{% else %}0{% endif %}" aria-live="polite">Loading more products…</div>
   <section class="closing-banner"><div><span class="eyebrow">A wardrobe, not a trend</span><h2>Find pieces that stay in rotation.</h2><p>From first coffee to last light, discover easy layers made to move with you.</p></div><a class="secondary" href="#collection">Browse all pieces <span aria-hidden="true">→</span></a></section>
 </div>
 </div>
@@ -70,5 +70,5 @@
   <img class="product-image-lightbox-photo" alt="" role="button" tabindex="0" aria-label="Zoom in on product image">
 </dialog>
 {% load static %}
-<script src="{% static 'storefront.js' %}?v=25" defer></script>
+<script src="{% static 'storefront.js' %}?v=26" defer></script>
 {% endblock %}

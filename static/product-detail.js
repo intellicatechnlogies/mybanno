@@ -9,6 +9,27 @@
   const arrows = gallery.querySelectorAll('[data-gallery-step]');
   const position = gallery.querySelector('.detail-gallery-position');
   let activeIndex = 0;
+  const preloadCache = new Map();
+
+  const preloadMedia = () => {
+    mediaItems.forEach((media) => {
+      const src = media.dataset.mediaSrc;
+      if (!src || preloadCache.has(src)) return;
+      if (media.dataset.mediaType === 'video') {
+        const preloadVideo = document.createElement('video');
+        preloadVideo.preload = 'metadata';
+        preloadVideo.muted = true;
+        preloadVideo.src = src;
+        preloadVideo.load();
+        preloadCache.set(src, preloadVideo);
+      } else {
+        const preloadImage = new Image();
+        preloadImage.decoding = 'async';
+        preloadImage.src = src;
+        preloadCache.set(src, preloadImage);
+      }
+    });
+  };
 
   const showMedia = (index) => {
     if (!mediaItems.length) return;
@@ -31,6 +52,12 @@
     }
     if (position) position.textContent = `${activeIndex + 1} / ${mediaItems.length}`;
   };
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(preloadMedia, { timeout: 1500 });
+  } else {
+    window.setTimeout(preloadMedia, 100);
+  }
 
   arrows.forEach((arrow) => {
     arrow.addEventListener('click', () => showMedia(activeIndex + Number(arrow.dataset.galleryStep)));
