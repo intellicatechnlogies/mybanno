@@ -3,8 +3,10 @@ from functools import wraps
 import hashlib
 import hmac
 import json
+import random
 import time
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
@@ -25,13 +27,23 @@ from werkzeug.security import check_password_hash as check_legacy_password_hash
 
 from .forms import (
     CheckoutForm,
+    CustomerLoginForm,
+    CustomerSignupForm,
     DEFAULT_COLOR_VALUES,
     DEFAULT_PRODUCT_NAMES,
     DEFAULT_SIZES,
     OrderUpdateForm,
     ProductForm,
 )
-from .models import AdminAccount, Credential, Product, ShopOrder, ShopOrderItem
+from .models import (
+    AdminAccount,
+    Credential,
+    Customer,
+    CustomerCartItem,
+    Product,
+    ShopOrder,
+    ShopOrderItem,
+)
 from .product_names import product_name_options, remove_product_name_option
 from .s3_media import delete_media_url, get_media_s3_client, load_media_config
 
@@ -161,6 +173,376 @@ def serve_s3_media(request, key):
     )
     response = HttpResponseRedirect(signed_url)
     response["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+def signup(request):
+    if request.session.get("customer_id"):
+        return redirect("index")
+    if request.method == "GET":
+        params = {"signup": "1"}
+        next_url = request.GET.get("next", "")
+        if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            params["next"] = next_url
+        return redirect(f"{reverse('index')}?{urlencode(params)}")
+    form = CustomerSignupForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        challenge = request.session.get("customer_security_challenge", {})
+        supplied_answer = request.POST.get("security_answer", "").strip()
+        if (
+            not challenge
+            or float(challenge.get("expires", 0)) < time.time()
+            or not hmac.compare_digest(supplied_answer, str(challenge.get("answer", "")))
+        ):
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse({"error": "Security check failed. Please answer the new question and try again."}, status=400)
+            messages.error(request, "Security check failed. Please answer the new question and try again.")
+            return redirect(f"{reverse('index')}?signup=1")
+        customer = Customer(
+            first_name=form.cleaned_data["first_name"].strip(),
+            last_name=form.cleaned_data["last_name"].strip(),
+            email=form.cleaned_data["email"],
+            mobile_number=form.cleaned_data["mobile_number"],
+        )
+        customer.set_password(form.cleaned_data["password"])
+        customer.save()
+        request.session["customer_id"] = customer.pk
+        request.session["customer_name"] = customer.first_name
+        request.session["customer_last_activity"] = time.time()
+        merge_session_cart_into_customer(request, customer)
+        messages.success(request, "Your account has been created.")
+        if request.headers.get("Accept") == "application/json":
+            next_url = request.POST.get("next", "")
+            redirect_url = next_url if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}) else "/"
+            return JsonResponse({"success": True, "redirect": redirect_url})
+        return redirect(request.POST.get("next") if request.POST.get("next", "").startswith("/") else "index")
+    if request.method == "POST" and request.headers.get("Accept") == "application/json":
+        errors = {
+            field: [error["message"] for error in field_errors]
+            for field, field_errors in form.errors.get_json_data().items()
+        }
+        return JsonResponse(
+            {
+                "error": "Please correct the highlighted account details.",
+                "errors": errors,
+            },
+            status=400,
+        )
+    return render(request, "customer_signup.html", {"form": form})
+
+
+def customer_security_question(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+    left = random.randint(1, 12)
+    right = random.randint(1, 12)
+    request.session["customer_security_challenge"] = {
+        "answer": str(left + right),
+        "question": f"{left} + {right}",
+        "expires": time.time() + 600,
+    }
+    return JsonResponse({"question": f"{left} + {right}"})
+
+
+def customer_login(request):
+    if request.session.get("customer_id"):
+        return redirect("index")
+    if request.method == "GET":
+        params = {"login": "1"}
+        next_url = request.GET.get("next", "")
+        if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            params["next"] = next_url
+        return redirect(f"{reverse('index')}?{urlencode(params)}")
+    form = CustomerLoginForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        challenge = request.session.get("customer_security_challenge", {})
+        supplied_answer = form.cleaned_data["security_answer"].strip()
+        if (
+            not challenge
+            or float(challenge.get("expires", 0)) < time.time()
+            or not hmac.compare_digest(supplied_answer, str(challenge.get("answer", "")))
+        ):
+            left = int(time.time_ns() % 12) + 1
+            right = int((time.time_ns() // 1000) % 12) + 1
+            request.session["customer_security_challenge"] = {
+                "answer": str(left + right),
+                "question": f"{left} + {right}",
+                "expires": time.time() + 600,
+            }
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse(
+                    {"error": "Security check failed. Please answer the new question and try again."},
+                    status=400,
+                )
+            messages.error(request, "Security check failed. Please answer the new question and try again.")
+            return redirect(f"{reverse('index')}?login=1")
+
+        attempts = request.session.get("customer_login_attempts", [])
+        now = time.time()
+        attempts = [attempted_at for attempted_at in attempts if now - attempted_at < 300]
+        if len(attempts) >= 5:
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse({"error": "Too many login attempts. Please wait 5 minutes."}, status=429)
+            messages.error(request, "Too many login attempts. Please wait 5 minutes.")
+            return redirect(f"{reverse('index')}?login=1")
+
+        login_value = form.cleaned_data["login"].strip().lower()
+        customer = (
+            Customer.objects.filter(mobile_number=login_value).first()
+            if login_value.isdigit()
+            else Customer.objects.filter(email__iexact=login_value).first()
+        )
+        if customer is None or not customer.check_password(form.cleaned_data["password"]):
+            attempts.append(now)
+            request.session["customer_login_attempts"] = attempts
+            left = random.randint(1, 12)
+            right = random.randint(1, 12)
+            request.session["customer_security_challenge"] = {
+                "answer": str(left + right),
+                "question": f"{left} + {right}",
+                "expires": time.time() + 600,
+            }
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse({"error": "Invalid login details or password."}, status=401)
+            messages.error(request, "Invalid login details or password.")
+            return redirect(f"{reverse('index')}?login=1")
+        else:
+            request.session["customer_id"] = customer.pk
+            request.session["customer_name"] = customer.first_name
+            request.session["customer_last_activity"] = time.time()
+            request.session["customer_login_attempts"] = []
+            request.session.pop("customer_security_challenge", None)
+            merge_session_cart_into_customer(request, customer)
+            next_url = request.POST.get("next", "")
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse({"success": True, "redirect": next_url if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}) else "/"})
+            return redirect(next_url if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}) else "index")
+    if request.method == "POST":
+        return redirect(f"{reverse('index')}?login=1")
+    return redirect("index")
+
+
+def customer_logout(request):
+    if request.method in ("GET", "POST"):
+        request.session.pop("customer_id", None)
+        request.session.pop("customer_name", None)
+        request.session.pop("customer_last_activity", None)
+        if request.GET.get("timeout") == "1":
+            messages.info(request, "Your session expired after 30 minutes of inactivity.")
+        else:
+            messages.success(request, "You have been logged out.")
+    return redirect("index")
+
+
+def customer_required(view):
+    @wraps(view)
+    def wrapped_view(request, *args, **kwargs):
+        customer_id = request.session.get("customer_id")
+        if not customer_id:
+            messages.warning(request, "Please log in to view your orders.")
+            return redirect(f"{reverse('customer_login')}?next={request.path}")
+        return view(request, *args, **kwargs)
+    return wrapped_view
+
+
+@customer_required
+def order_history(request):
+    customer = get_object_or_404(Customer, pk=request.session["customer_id"])
+    orders = ShopOrder.objects.filter(customer=customer).prefetch_related("items").order_by("-created_at", "-pk")
+    return render(request, "order_history.html", {"orders": orders})
+
+
+@customer_required
+def order_invoice_pdf(request, order_number):
+    customer = get_object_or_404(Customer, pk=request.session["customer_id"])
+    order = get_object_or_404(
+        ShopOrder.objects.prefetch_related("items"),
+        order_number=order_number,
+        customer=customer,
+    )
+
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=f"Invoice {order.order_number}",
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="Compact",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=8,
+        leading=9.5,
+        spaceAfter=0,
+    ))
+    styles.add(ParagraphStyle(
+        name="InvoiceTitle",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        leading=18,
+        alignment=0,
+        spaceAfter=2,
+    ))
+    styles.add(ParagraphStyle(
+        name="InvoiceHeader",
+        parent=styles["Compact"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        leading=11,
+    ))
+    styles.add(ParagraphStyle(
+        name="InvoiceLabel",
+        parent=styles["Compact"],
+        fontSize=7,
+        leading=8,
+        textColor=colors.HexColor("#555555"),
+    ))
+
+    logo_path = settings.BASE_DIR / "static" / "mybanno-invoice-logo.png"
+    header_left = Paragraph("<b>MYBANNO</b><br/><font size='7'>Customer order invoice</font>", styles["InvoiceTitle"])
+    if logo_path.exists():
+        logo_image = Image(str(logo_path), width=17 * mm, height=17 * mm)
+        header_left = [logo_image, Paragraph("<b>MYBANNO</b>", styles["InvoiceTitle"])]
+
+    header = Table(
+        [[header_left, Paragraph("<b>Tax Invoice</b><br/><font size='7'>Invoice No: %s</font>" % order.order_number, styles["Compact"])]],
+        colWidths=[118 * mm, 56 * mm],
+    )
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#222222")),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+    ]))
+    elements = [header, Spacer(1, 3 * mm)]
+
+    details = Table([
+        [Paragraph("<b>Order ID:</b> %s" % order.order_number, styles["Compact"]),
+         Paragraph("<b>Order Date:</b> %s" % order.created_at.strftime("%d-%m-%Y"), styles["Compact"])],
+        [Paragraph("<b>Invoice No:</b> %s" % order.order_number, styles["Compact"]),
+         Paragraph("<b>Invoice Date:</b> %s" % order.created_at.strftime("%d-%m-%Y"), styles["Compact"])],
+    ], colWidths=[87 * mm, 87 * mm])
+    details.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    elements.extend([details, Spacer(1, 2 * mm)])
+
+    address = f"{customer.first_name} {customer.last_name}".strip()
+    customer_blocks = Table([
+        [Paragraph("<b>Billing Address</b>", styles["InvoiceHeader"]),
+         Paragraph("<b>Shipping Address</b>", styles["InvoiceHeader"])],
+        [Paragraph("%s<br/>%s<br/>Mobile: %s" % (
+            address, order.delivery_address.replace("\n", "<br/>"), order.mobile_number), styles["Compact"]),
+         Paragraph("%s<br/>%s<br/>Mobile: %s" % (
+            address, order.delivery_address.replace("\n", "<br/>"), order.mobile_number), styles["Compact"])],
+    ], colWidths=[87 * mm, 87 * mm])
+    customer_blocks.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.HexColor("#777777")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOX", (0, 0), (-1, -1), 0.35, colors.HexColor("#dddddd")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#dddddd")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.extend([customer_blocks, Spacer(1, 4 * mm)])
+
+    data = [[
+        Paragraph("Product", styles["InvoiceHeader"]),
+        Paragraph("Qty", styles["InvoiceHeader"]),
+        Paragraph("Price (Rs.)", styles["InvoiceHeader"]),
+        Paragraph("Amount (Rs.)", styles["InvoiceHeader"]),
+    ]]
+    for item in order.items.all():
+        variant = " / ".join(value for value in (item.color, item.size) if value)
+        amount = item.unit_price * item.quantity
+        data.append([
+            Paragraph("<b>%s</b><br/><font size='7'>%s</font>" % (
+                item.product_name, variant or "-"), styles["Compact"]),
+            str(item.quantity),
+            f"Rs. {item.unit_price:.2f}",
+            f"Rs. {amount:.2f}",
+        ])
+    table = Table(data, colWidths=[106 * mm, 12 * mm, 29 * mm, 27 * mm], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f0ea")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111111")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d8d4cb")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("LEADING", (0, 1), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+    ]))
+    totals = Table([
+        ["", Paragraph("<b>Grand Total</b>", styles["InvoiceHeader"]),
+         Paragraph("<b>Rs. %s</b>" % f"{order.subtotal:.2f}", styles["InvoiceTitle"])],
+    ], colWidths=[96 * mm, 43 * mm, 35 * mm])
+    totals.setStyle(TableStyle([
+        ("ALIGN", (1, 0), (-1, 0), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
+        ("LINEABOVE", (1, 0), (-1, 0), 0.8, colors.HexColor("#222222")),
+        ("TOPPADDING", (0, 0), (-1, 0), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+    ]))
+    elements.extend([
+        table,
+        Spacer(1, 4 * mm),
+        totals,
+        Spacer(1, 8 * mm),
+        Paragraph("<i>This is a computer-generated invoice.</i>", styles["InvoiceLabel"]),
+    ])
+
+    logo_path = settings.BASE_DIR / "static" / "mybanno-invoice-logo.png"
+
+    def draw_logo_watermark(canvas, _document):
+        if not logo_path.exists():
+            return
+        logo = ImageReader(str(logo_path))
+        logo_width, logo_height = logo.getSize()
+        watermark_width = 95 * mm
+        watermark_height = watermark_width * logo_height / logo_width
+        canvas.saveState()
+        if hasattr(canvas, "setFillAlpha"):
+            canvas.setFillAlpha(0.08)
+        canvas.drawImage(
+            logo,
+            (A4[0] - watermark_width) / 2,
+            (A4[1] - watermark_height) / 2,
+            width=watermark_width,
+            height=watermark_height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        canvas.restoreState()
+
+    document.build(
+        elements,
+        onFirstPage=draw_logo_watermark,
+        onLaterPages=draw_logo_watermark,
+    )
+
+    pdf = buffer.getvalue()
+    buffer.close()
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="Mybanno-{order.order_number}.pdf"'
     return response
 
 
@@ -405,6 +787,80 @@ def product_modal_data(request, product_id):
     )
 
 
+def get_customer_from_session(request):
+    customer_id = request.session.get("customer_id")
+    return Customer.objects.filter(pk=customer_id).first() if customer_id else None
+
+
+def merge_session_cart_into_customer(request, customer):
+    session_cart = request.session.get("shop_cart", {})
+    if not isinstance(session_cart, dict):
+        session_cart = {}
+
+    for item in customer.cart_items.select_related("product").all():
+        key = (
+            f"{item.product_id}|{item.color}|{item.size}"
+            if item.product.colors
+            else f"{item.product_id}|{item.size}"
+        )
+        if key not in session_cart:
+            session_cart[key] = {
+                "product_id": item.product_id,
+                "color": item.color,
+                "color_code": item.color_code or item.product.color_value_for(item.color),
+                "size": item.size,
+                "quantity": item.quantity,
+            }
+
+    for key, item in session_cart.items():
+        if not isinstance(item, dict):
+            continue
+        product = Product.objects.filter(pk=item.get("product_id")).first()
+        if product is None:
+            continue
+        CustomerCartItem.objects.update_or_create(
+            customer=customer,
+            product=product,
+            color=str(item.get("color", "")).strip(),
+            size=str(item.get("size", "")).strip(),
+            defaults={
+                "color_code": str(item.get("color_code", "")).strip() or product.color_value_for(str(item.get("color", ""))),
+                "quantity": max(1, int(item.get("quantity", 1))),
+            },
+        )
+
+    request.session["shop_cart"] = session_cart
+    return session_cart
+
+
+def save_customer_cart(request, customer=None):
+    customer = customer or get_customer_from_session(request)
+    if customer is None:
+        return
+    cart = request.session.get("shop_cart", {})
+    cart = cart if isinstance(cart, dict) else {}
+    customer.cart_items.all().delete()
+    for item in cart.values():
+        if not isinstance(item, dict):
+            continue
+        product = Product.objects.filter(pk=item.get("product_id")).first()
+        if product is None:
+            continue
+        color = str(item.get("color", "")).strip()
+        size = str(item.get("size", "")).strip()
+        quantity = max(1, int(item.get("quantity", 1)))
+        CustomerCartItem.objects.update_or_create(
+            customer=customer,
+            product=product,
+            color=color,
+            size=size,
+            defaults={
+                "color_code": str(item.get("color_code", "")).strip() or product.color_value_for(color),
+                "quantity": quantity,
+            },
+        )
+
+
 def cart_add(request):
     if request.method != "POST":
         return HttpResponse(status=405)
@@ -471,6 +927,9 @@ def cart_add(request):
         "quantity": int(existing.get("quantity", 0)) + quantity,
     }
     request.session["shop_cart"] = cart
+    customer = get_customer_from_session(request)
+    if customer is not None:
+        save_customer_cart(request, customer)
     return JsonResponse(
         {
             "message": (
@@ -488,6 +947,9 @@ def cart_add(request):
 def cart(request):
     cart_data = request.session.get("shop_cart", {})
     cart_data = cart_data if isinstance(cart_data, dict) else {}
+    customer = get_customer_from_session(request)
+    if customer is not None:
+        cart_data = merge_session_cart_into_customer(request, customer)
     products = {
         product.pk: product
         for product in Product.objects.filter(
@@ -587,12 +1049,20 @@ def cart(request):
             else:
                 item["quantity"] = quantity
         request.session["shop_cart"] = cleaned_cart
+        if customer is not None:
+            save_customer_cart(request, customer)
         return redirect("cart")
 
     return render(request, "cart.html", {"items": items, "subtotal": subtotal})
 
 
 def checkout(request):
+    customer = get_customer_from_session(request)
+    if customer is None:
+        messages.warning(request, "Please log in before placing an order.")
+        params = {"login": "1", "next": reverse("checkout")}
+        return redirect(f"{reverse('index')}?{urlencode(params)}")
+
     cart_data = request.session.get("shop_cart", {})
     cart_data = cart_data if isinstance(cart_data, dict) else {}
     if not cart_data:
@@ -629,7 +1099,14 @@ def checkout(request):
         )
         checkout_subtotal += unit_price * quantity
 
-    form = CheckoutForm(request.POST or None)
+    customer = Customer.objects.filter(pk=request.session.get("customer_id")).first() if request.session.get("customer_id") else None
+    form = CheckoutForm(
+        request.POST or None,
+        initial={
+            "recipient_name": f"{customer.first_name} {customer.last_name}".strip() if customer else "",
+            "mobile_number": customer.mobile_number if customer else "",
+        },
+    )
     if request.method == "POST" and form.is_valid():
         product_ids = {
             item.get("product_id")
@@ -692,6 +1169,7 @@ def checkout(request):
                     Decimal("0.00"),
                 )
                 order = ShopOrder.objects.create(
+                    customer=customer,
                     mobile_number=form.cleaned_data["mobile_number"],
                     delivery_address=form.formatted_delivery_address(),
                     subtotal=subtotal,
@@ -730,6 +1208,9 @@ def checkout(request):
             return redirect("cart")
         if order is not None:
             request.session["shop_cart"] = {}
+            customer = get_customer_from_session(request)
+            if customer is not None:
+                customer.cart_items.all().delete()
             request.session["last_order_id"] = order.pk
             return redirect("checkout_complete")
 
@@ -745,6 +1226,8 @@ def checkout_complete(request):
     if not order_id:
         return redirect("index")
     order = get_object_or_404(ShopOrder.objects.prefetch_related("items"), pk=order_id)
+    if order.customer_id and order.customer_id != request.session.get("customer_id"):
+        return redirect("index")
     return render(request, "checkout_complete.html", {"order": order})
 
 

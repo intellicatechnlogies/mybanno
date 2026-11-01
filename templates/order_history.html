@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}My orders · Mybanno{% endblock %}
+{% block content %}
+<div class="container order-history-page">
+  <span class="eyebrow">Your account</span>
+  <h1>Order history</h1>
+  {% if orders %}
+    <div class="order-history-list">
+      {% for order in orders %}
+      <article class="order-history-card">
+        <div class="order-history-heading">
+          <div><strong>{{ order.order_number }}</strong><span>{{ order.created_at|date:"d M Y, h:i A" }}</span></div>
+          <span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span>
+        </div>
+        <div class="order-history-items">
+          {% for item in order.items.all %}
+            <p>{{ item.product_name }}{% if item.size %} · {{ item.size }}{% endif %}{% if item.color %} · {{ item.color }}{% endif %} × {{ item.quantity }}</p>
+          {% endfor %}
+        </div>
+        <strong class="order-history-total">Subtotal ₹{{ order.subtotal|floatformat:2 }}</strong>
+        <a class="button" href="{% url 'order_invoice_pdf' order_number=order.order_number %}">Download invoice</a>
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty order-history-empty"><h2>No orders yet</h2><p>Your placed orders will appear here.</p><a class="button" href="{% url 'index' %}#collection">Start shopping</a></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -4,7 +4,7 @@ from django import forms
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Product, ProductMedia, ShopOrder
+from .models import Customer, Product, ProductMedia, ShopOrder
 from .product_names import product_name_options
 from .s3_media import upload_media, delete_media_url
 
@@ -37,6 +37,58 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_VIDEO_SIZE = 5 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+
+
+class CustomerSignupForm(forms.Form):
+    first_name = forms.CharField(max_length=100, widget=forms.TextInput(attrs={"autocomplete": "given-name"}))
+    last_name = forms.CharField(max_length=100, widget=forms.TextInput(attrs={"autocomplete": "family-name"}))
+    email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={"autocomplete": "email"}))
+    mobile_number = forms.CharField(
+        min_length=10,
+        max_length=10,
+        widget=forms.TextInput(attrs={"type": "tel", "inputmode": "numeric", "autocomplete": "tel"}),
+    )
+    password = forms.CharField(
+        min_length=8,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+    confirm_password = forms.CharField(
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+
+    def clean_mobile_number(self):
+        mobile = self.cleaned_data["mobile_number"]
+        if len(mobile) != 10 or not mobile.isascii() or not mobile.isdigit():
+            raise forms.ValidationError("Enter a valid 10-digit mobile number.")
+        if Customer.objects.filter(mobile_number=mobile).exists():
+            raise forms.ValidationError("An account already exists for this mobile number.")
+        return mobile
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email", "").strip().lower()
+        if email and Customer.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("An account already exists for this email address.")
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        password = cleaned.get("password")
+        confirm_password = cleaned.get("confirm_password")
+        if password and confirm_password and password != confirm_password:
+            self.add_error("confirm_password", "Passwords do not match.")
+        return cleaned
+
+
+class CustomerLoginForm(forms.Form):
+    login = forms.CharField(
+        max_length=254,
+        widget=forms.TextInput(attrs={"autocomplete": "username", "placeholder": "Mobile number or email"}),
+    )
+    password = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}))
+    security_answer = forms.CharField(
+        max_length=4,
+        widget=forms.TextInput(attrs={"inputmode": "numeric", "autocomplete": "off", "placeholder": "Your answer"}),
+    )
 
 
 class MultipleFileInput(forms.ClearableFileInput):

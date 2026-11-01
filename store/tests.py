@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import DEFAULT_PRODUCT_NAMES, ProductForm
-from .models import AdminAccount, Credential, Product, ProductMedia, ShopOrder, ShopOrderItem
+from .models import AdminAccount, Credential, Customer, Product, ProductMedia, ShopOrder, ShopOrderItem
 from .s3_media import extract_s3_key, delete_media_url
 
 
@@ -49,6 +49,18 @@ class StorefrontTests(TestCase):
             stock=0,
             sizes="Free Size",
         )
+        self.test_customer = Customer.objects.create(
+            first_name="Test",
+            last_name="Customer",
+            email="test@example.com",
+            mobile_number="9876543211",
+        )
+        self.test_customer.set_password("TestPassword123!")
+        self.test_customer.save(update_fields=["password_hash"])
+        session = self.client.session
+        session["customer_id"] = self.test_customer.pk
+        session["customer_name"] = self.test_customer.first_name
+        session.save()
 
     def test_s3_media_url_formats_extract_the_object_key(self):
         self.assertEqual(
@@ -124,6 +136,132 @@ class StorefrontTests(TestCase):
         }
         details.update(overrides)
         return details
+
+    def test_signup_ajax_reports_password_validation_errors(self):
+        session = self.client.session
+        session.pop("customer_id", None)
+        session.pop("customer_name", None)
+        session.save()
+        response = self.client.post(
+            reverse("customer_signup"),
+            {
+                "first_name": "Asha",
+                "last_name": "Sharma",
+                "email": "asha@example.com",
+                "mobile_number": "9876543219",
+                "password": "short",
+                "confirm_password": "short",
+                "security_answer": "12",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("password", data["errors"])
+
+    def test_signup_accepts_numeric_password_with_eight_characters(self):
+        session = self.client.session
+        session.pop("customer_id", None)
+        session.pop("customer_name", None)
+        session["customer_security_challenge"] = {
+            "answer": "12",
+            "question": "3 + 9",
+            "expires": time.time() + 600,
+        }
+        session.save()
+        response = self.client.post(
+            reverse("customer_signup"),
+            {
+                "first_name": "Asha",
+                "last_name": "Sharma",
+                "email": "simple@example.com",
+                "mobile_number": "9876543218",
+                "password": "12345678",
+                "confirm_password": "12345678",
+                "security_answer": "12",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Customer.objects.get(mobile_number="9876543218").check_password("12345678"))
+
+    def test_guest_cannot_place_order(self):
+        session = self.client.session
+        session.pop("customer_id", None)
+        session.pop("customer_name", None)
+        session["shop_cart"] = {
+            f"{self.first_product.pk}|S": {
+                "product_id": self.first_product.pk,
+                "color": "",
+                "color_code": "",
+                "size": "S",
+                "quantity": 1,
+            }
+        }
+        session.save()
+
+        get_response = self.client.get(reverse("checkout"))
+        self.assertEqual(get_response.status_code, 302)
+        self.assertEqual(get_response["Location"], "/?login=1&next=%2Fcheckout%2F")
+
+        post_response = self.client.post(reverse("checkout"), self.checkout_details())
+        self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(post_response["Location"], "/?login=1&next=%2Fcheckout%2F")
+        self.assertEqual(ShopOrder.objects.count(), 0)
+
+    def test_customer_signup_login_and_order_history(self):
+        session = self.client.session
+        session.pop("customer_id", None)
+        session.pop("customer_name", None)
+        session["customer_security_challenge"] = {
+            "answer": "12",
+            "question": "3 + 9",
+            "expires": time.time() + 600,
+        }
+        session.save()
+        signup_response = self.client.post(
+            reverse("customer_signup"),
+            {
+                "first_name": "Asha",
+                "last_name": "Sharma",
+                "email": "asha@example.com",
+                "mobile_number": "9876543210",
+                "password": "StrongPass123!",
+                "confirm_password": "StrongPass123!",
+                "security_answer": "12",
+            },
+        )
+        self.assertRedirects(signup_response, reverse("index"))
+        customer = Customer.objects.get(mobile_number="9876543210")
+        self.assertTrue(customer.check_password("StrongPass123!"))
+
+        self.client.post(reverse("customer_logout"))
+        session = self.client.session
+        session["customer_security_challenge"] = {
+            "answer": "12",
+            "question": "3 + 9",
+            "expires": time.time() + 600,
+        }
+        session.save()
+        login_response = self.client.post(
+            reverse("customer_login"),
+            {"login": "asha@example.com", "password": "StrongPass123!", "security_answer": "12"},
+        )
+        self.assertRedirects(login_response, reverse("index"))
+
+        self.client.post(
+            reverse("cart_add"),
+            {"product_id": self.first_product.pk, "size": "S", "quantity": "1"},
+        )
+        checkout_response = self.client.post(reverse("checkout"), self.checkout_details())
+        self.assertRedirects(checkout_response, reverse("checkout_complete"))
+        order = ShopOrder.objects.get(customer=customer)
+        self.assertTrue(order.order_number.startswith("MB-"))
+        self.assertEqual(len(order.order_number), 15)
+
+        history_response = self.client.get(reverse("order_history"))
+        self.assertContains(history_response, order.order_number)
 
     def test_size_inventory_and_discount_are_displayed(self):
         self.first_product.size_stock = {"S": 2, "M": 1}

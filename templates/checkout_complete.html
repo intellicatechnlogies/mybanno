@@ -5,7 +5,7 @@
   <section class="checkout-success">
     <span class="eyebrow">Order received</span>
     <h1>Thank you for your order</h1>
-    <p>Your order number is <strong>#{{ order.pk }}</strong>.</p>
+    <p>Your order number is <strong>{{ order.order_number }}</strong>.</p>
     <p>We saved your delivery details and order items. Payment is not collected online.</p>
     <div class="checkout-success-summary">
       {% for item in order.items.all %}
@@ -13,7 +13,8 @@
       {% endfor %}
       <p class="checkout-total">Subtotal <strong>{{ order.subtotal|floatformat:2 }}</strong></p>
     </div>
-    <a class="button" href="{% url 'index' %}#collection">Continue shopping</a>
+    <a class="button" href="{% url 'order_invoice_pdf' order_number=order.order_number %}">Download invoice PDF</a>
+    <a class="secondary" href="{% url 'index' %}#collection">Continue shopping</a>
   </section>
 </div>
 {% endblock %}

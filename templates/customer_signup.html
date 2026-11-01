@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Sign up · Mybanno{% endblock %}
+{% block content %}
+<div class="container account-page">
+  <section class="account-card secure-login-card secure-login-inline">
+    <div class="secure-login-logo" aria-hidden="true">&#128737;</div>
+    <div class="secure-login-kicker">Mybanno Secure Access</div>
+    <span class="eyebrow">Join Mybanno</span>
+    <h1>Create account</h1>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+      <div class="secure-signup-name-row">
+        <p>{{ form.first_name.label_tag }}{{ form.first_name }}{{ form.first_name.errors }}</p>
+        <p>{{ form.last_name.label_tag }}{{ form.last_name }}{{ form.last_name.errors }}</p>
+      </div>
+      <p>{{ form.email.label_tag }}{{ form.email }}{{ form.email.errors }}</p>
+      <p>{{ form.mobile_number.label_tag }}{{ form.mobile_number }}{{ form.mobile_number.errors }}</p>
+      <p>{{ form.password.label_tag }}{{ form.password }}{{ form.password.errors }}</p>
+      <p>{{ form.confirm_password.label_tag }}{{ form.confirm_password }}{{ form.confirm_password.errors }}</p>
+      <div class="secure-question-row">
+        <div><strong>Quick security check</strong><span class="secure-question">{{ security_question }}</span></div>
+        <div class="secure-answer-wrap"><input name="security_answer" required inputmode="numeric" autocomplete="off" placeholder="Your answer"></div>
+      </div>
+      {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+      <button class="button" type="submit">Create account</button>
+    </form>
+    <p class="account-switch">Already have an account? <a href="{% url 'customer_login' %}?next={{ request.GET.next|urlencode }}">Login</a></p>
+  </section>
+</div>
+{% endblock %}
