@@ -5,6 +5,12 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("signup/", views.signup, name="customer_signup"),
+    path("login/", views.customer_login, name="customer_login"),
+    path("login/security-question/", views.customer_security_question, name="customer_security_question"),
+    path("logout/", views.customer_logout, name="customer_logout"),
+    path("orders/", views.order_history, name="order_history"),
+    path("orders/<str:order_number>/invoice.pdf", views.order_invoice_pdf, name="order_invoice_pdf"),
     path("api/credentials", views.add_credential, name="add_credential"),
     path("media-cache/<path:key>", views.cached_thumbnail, name="cached_thumbnail"),
     path("media/<path:key>", views.serve_s3_media, name="serve_s3_media"),

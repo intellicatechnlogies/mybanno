@@ -42,7 +42,9 @@
           {% for order in page.object_list %}
             <tr>
               <td>
-                <strong>#{{ order.pk }}</strong><br>
+                <span class="order-id-label">Order ID</span>
+                <strong class="order-id-value">{{ order.order_number }}</strong>
+                <span class="order-record-id">Record #{{ order.pk }}</span>
                 <time datetime="{{ order.created_at|date:'c' }}">{{ order.created_at|date:"M j, Y · g:i A" }}</time>
               </td>
               <td>

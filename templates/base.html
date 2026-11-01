@@ -11,12 +11,95 @@
   {% load static %}
   <link rel="icon" type="image/png" href="{% static 'mibanno-logo-white.png' %}?v=2">
   <link rel="apple-touch-icon" href="{% static 'mibanno-logo-white.png' %}?v=2">
-  <link rel="stylesheet" href="{% static 'style.css' %}?v=42">
+  <link rel="stylesheet" href="{% static 'style.css' %}?v=43">
   <link rel="stylesheet" href="{% static 'mobile.css' %}?v=1">
+  <style>
+    .login-modal-open { overflow:hidden; }
+    #secure-login-modal { position:fixed; inset:0; z-index:1000; display:none; place-items:center; padding:24px; }
+    #secure-login-modal.is-open { display:grid !important; }
+    #secure-login-modal .secure-login-backdrop { position:absolute; inset:0; width:100%; border:0; background:rgba(6,17,43,.72); cursor:default; }
+    #secure-login-modal .secure-login-card { position:relative; z-index:1; width:min(620px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; padding:44px 52px 34px; border-radius:22px; background:#fff; box-shadow:0 24px 70px rgba(0,0,0,.25); }
+    #secure-login-modal .secure-login-close { position:absolute; right:28px; top:24px; width:38px; height:38px; border:0; border-radius:50%; background:#f3f5f8; color:#5c687b; font-size:30px; line-height:1; cursor:pointer; }
+    #secure-login-modal .secure-login-logo { width:64px; height:64px; display:grid; place-items:center; border-radius:16px; background:#1760e3; color:#fff; font-size:30px; margin-bottom:18px; }
+    #secure-login-modal .secure-login-kicker { color:#1760e3; text-transform:uppercase; font-size:12px; font-weight:800; letter-spacing:1.2px; }
+    #secure-login-modal .secure-login-card h1 { margin:12px 0 7px; font-size:42px; line-height:1.1; }
+    #secure-login-modal .secure-login-intro { margin:0 0 22px; color:#6d7380; }
+    #secure-login-modal form { display:grid; gap:14px; }
+    #secure-login-modal form > label { font-weight:700; font-size:14px; }
+    #secure-login-modal form > input, #secure-login-modal .secure-password-wrap input, #secure-login-modal .secure-answer-wrap input { box-sizing:border-box; width:100%; height:54px; border:1px solid #d8d4cb; border-radius:11px; padding:0 18px; font-size:16px; }
+    #secure-login-modal .secure-password-wrap { position:relative; }
+    #secure-login-modal .secure-password-wrap input { padding-right:58px; }
+    #secure-login-modal .secure-password-wrap button { position:absolute; right:14px; top:50%; transform:translateY(-50%); border:0; background:transparent; cursor:pointer; }
+    #secure-login-modal .secure-question-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border:1px solid #e6e1d8; border-radius:12px; background:#fbfbfc; }
+    #secure-login-modal .secure-question-row > div:first-child { display:grid; gap:7px; }
+    #secure-login-modal .secure-question { color:#1760e3; font-size:22px; font-weight:800; }
+    #secure-login-modal .secure-answer-wrap { display:grid; justify-items:end; gap:5px; }
+    #secure-login-modal .secure-answer-wrap button { border:0; background:transparent; color:#1760e3; cursor:pointer; }
+    #secure-login-modal .secure-answer-wrap input { width:150px; }
+    #secure-login-modal .secure-login-submit { width:100%; height:62px; border:0; border-radius:10px; background:#174baf; color:#fff; font-size:16px; font-weight:800; cursor:pointer; }
+    #secure-login-modal .secure-login-switch, #secure-login-modal .secure-login-protected { text-align:center; }
+    #secure-login-modal .secure-login-switch a { color:#1760e3; font-weight:800; }
+    #secure-signup-modal { position:fixed; inset:0; z-index:1000; display:none; place-items:center; padding:24px; }
+    #secure-signup-modal.is-open { display:grid !important; }
+    #secure-signup-modal .secure-login-backdrop { position:absolute; inset:0; width:100%; border:0; background:rgba(6,17,43,.72); cursor:default; }
+    #secure-signup-modal .secure-login-card { position:relative; z-index:1; width:min(620px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; }
+    .secure-signup-name-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .secure-signup-name-row > div { display:grid; gap:7px; }
+    #secure-signup-modal .secure-login-card { padding:44px 52px 34px; border-radius:22px; background:#fff; box-shadow:0 24px 70px rgba(0,0,0,.25); }
+    #secure-signup-modal .secure-login-logo { width:64px; height:64px; display:grid; place-items:center; border-radius:16px; background:#1760e3; color:#fff; font-size:30px; margin-bottom:18px; }
+    #secure-signup-modal .secure-login-kicker { color:#1760e3; text-transform:uppercase; font-size:12px; font-weight:800; letter-spacing:1.2px; }
+    #secure-signup-modal .secure-login-card h1 { margin:12px 0 7px; font-size:42px; line-height:1.1; }
+    #secure-signup-modal .secure-login-intro { margin:0 0 22px; color:#6d7380; }
+    #secure-signup-modal form { display:grid; gap:14px; }
+    #secure-signup-modal form label { font-weight:700; font-size:14px; }
+    #secure-signup-modal form input { box-sizing:border-box; width:100%; height:54px; border:1px solid #d8d4cb; border-radius:11px; padding:0 18px; font-size:16px; }
+    #secure-signup-modal .secure-password-wrap { position:relative; }
+    #secure-signup-modal .secure-password-wrap input { padding-right:58px; }
+    #secure-signup-modal .secure-password-wrap button { position:absolute; right:14px; top:50%; transform:translateY(-50%); border:0; background:transparent; cursor:pointer; }
+    #secure-signup-modal .secure-question-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border:1px solid #e6e1d8; border-radius:12px; background:#fbfbfc; }
+    #secure-signup-modal .secure-question-row > div:first-child { display:grid; gap:7px; }
+    #secure-signup-modal .secure-question { color:#1760e3; font-size:22px; font-weight:800; }
+    #secure-signup-modal .secure-answer-wrap { display:grid; justify-items:end; gap:5px; }
+    #secure-signup-modal .secure-answer-wrap button { border:0; background:transparent; color:#1760e3; cursor:pointer; }
+    #secure-signup-modal .secure-answer-wrap input { width:150px; height:52px; border:1px solid #d8d4cb; border-radius:11px; padding:0 12px; }
+    #secure-signup-modal .secure-login-submit { width:100%; height:62px; border:0; border-radius:10px; background:#174baf; color:#fff; font-size:16px; font-weight:800; cursor:pointer; }
+    #secure-signup-modal .secure-login-close { position:absolute; right:28px; top:24px; width:38px; height:38px; border:0; border-radius:50%; background:#f3f5f8; font-size:30px; line-height:1; cursor:pointer; }
+    #secure-signup-modal .secure-login-switch, #secure-signup-modal .secure-login-protected { text-align:center; }
+    #secure-signup-modal .secure-login-switch a { color:#1760e3; font-weight:800; }
+    @media (max-width:600px) {
+      #secure-signup-modal { padding:0; align-items:end; }
+      .secure-signup-name-row { grid-template-columns:1fr 1fr; }
+      #secure-signup-modal .secure-login-card { width:100%; max-height:96vh; border-radius:20px 20px 0 0; padding:28px 22px; box-sizing:border-box; }
+      #secure-signup-modal .secure-login-card h1 { font-size:34px; }
+      .secure-signup-name-row { grid-template-columns:1fr; gap:14px; }
+      #secure-signup-modal .secure-signup-name-row input,
+      #secure-signup-modal form > input,
+      #secure-signup-modal input,
+      #secure-signup-modal input[type="password"],
+      #secure-signup-modal .secure-password-wrap input { height:48px; font-size:16px; }
+      #secure-signup-modal .secure-question-row { flex-wrap:wrap; }
+      #secure-signup-modal .secure-answer-wrap { width:100%; justify-items:stretch; }
+      #secure-signup-modal .secure-answer-wrap input { width:100%; height:48px; }
+    }
+    @media (max-width:600px) {
+      #secure-login-modal { padding:0; align-items:end; }
+      #secure-login-modal .secure-login-card { width:100%; max-height:96vh; border-radius:20px 20px 0 0; padding:28px 22px; }
+      #secure-login-modal .secure-login-card h1 { font-size:34px; }
+      #secure-login-modal form > input,
+      #secure-login-modal .secure-password-wrap input,
+      #secure-login-modal .secure-answer-wrap input { height:48px; font-size:16px; }
+      #secure-login-modal .secure-question-row { flex-wrap:wrap; }
+      #secure-login-modal .secure-answer-wrap { width:100%; justify-items:stretch; }
+      #secure-login-modal .secure-answer-wrap input { width:100%; }
+    }
+  </style>
   <script src="{% static 'header-filters.js' %}?v=2" defer></script>
   <script src="{% static 'admin-idle.js' %}?v=2" defer></script>
 </head>
-<body data-admin-session="{% if request.session.admin_id %}1{% else %}0{% endif %}" data-admin-logout-url="{% url 'admin_logout' %}">
+<body data-admin-session="{% if request.session.admin_id %}1{% else %}0{% endif %}"
+      data-admin-logout-url="{% url 'admin_logout' %}"
+      data-customer-session="{% if request.session.customer_id %}1{% else %}0{% endif %}"
+      data-customer-logout-url="{% url 'customer_logout' %}?timeout=1">
   <header class="site-header">
     <div class="container nav-wrap">
       <a class="brand" href="{% url 'index' %}" aria-label="Mybanno home"><img src="{% static 'mibanno-logo-white.png' %}?v=2" alt="Mybanno"></a>
@@ -85,20 +168,296 @@
         <a href="{% url 'index' %}">Shop</a>
         <a href="{% url 'index' %}?offer=1#collection">Sale</a>
         <a href="{% url 'cart' %}">Cart <span class="cart-count" data-cart-count>{{ cart_count }}</span></a>
+        {% if request.session.customer_id %}
+          <a href="{% url 'order_history' %}">My orders</a>
+          <form method="post" action="{% url 'customer_logout' %}" class="nav-account-form">
+            {% csrf_token %}
+            <button class="nav-button" type="submit">Log out{% if request.session.customer_name %} · {{ request.session.customer_name }}{% endif %}</button>
+          </form>
+        {% else %}
+          <a class="nav-button" href="{% url 'customer_login' %}?next={{ request.path|urlencode }}" data-login-modal>Login</a>
+        {% endif %}
         {% if request.session.admin_id %}
           <a href="{% url 'admin_dashboard' %}">Admin dashboard</a>
           <a href="{% url 'admin_orders' %}">Orders</a>
           <a class="nav-button" href="{% url 'admin_logout' %}">Log out</a>
-        {% else %}
-          <a class="nav-button" href="{% url 'admin_login' %}">Admin login</a>
         {% endif %}
       </nav>
     </div>
   </header>
+  {% if not request.session.customer_id %}
+  <div class="secure-login-modal" id="secure-login-modal" aria-hidden="true">
+    <button class="secure-login-backdrop" type="button" data-login-close aria-label="Close login"></button>
+    <section class="secure-login-card" role="dialog" aria-modal="true" aria-labelledby="secure-login-title">
+      <button class="secure-login-close" type="button" data-login-close aria-label="Close">&times;</button>
+      <div class="secure-login-logo" aria-hidden="true">&#128737;</div>
+      <div class="secure-login-kicker">Mybanno Secure Access</div>
+      <h1 id="secure-login-title">Welcome back</h1>
+      <p class="secure-login-intro">Sign in to continue to your Mybanno account.</p>
+      <form method="post" action="{% url 'customer_login' %}" data-secure-login-form>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <label for="secure-login-username">Username</label>
+        <input id="secure-login-username" name="login" required autocomplete="username" placeholder="Mobile number or email">
+        <label for="secure-login-password">Password</label>
+        <div class="secure-password-wrap">
+          <input id="secure-login-password" name="password" type="password" required autocomplete="current-password">
+          <button type="button" data-password-toggle aria-label="Show password">Show</button>
+        </div>
+        <div class="secure-question-row">
+          <div>
+            <strong>Quick security check</strong>
+            <span class="secure-question" data-security-question>{{ security_question }}</span>
+          </div>
+          <div class="secure-answer-wrap">
+            <button type="button" data-new-question>New question</button>
+            <input name="security_answer" required inputmode="numeric" autocomplete="off" aria-label="Security answer" placeholder="Your answer">
+          </div>
+        </div>
+        <p class="secure-login-error" data-secure-login-error hidden></p>
+        <button class="secure-login-submit" type="submit">Sign in securely <span>&rarr;</span></button>
+      </form>
+      <p class="secure-login-switch">Don't have an account? <a href="{% url 'customer_signup' %}?next={{ request.path|urlencode }}" data-signup-modal>Sign up</a></p>
+      <p class="secure-login-protected">Your sign-in is protected and encrypted.</p>
+    </section>
+  </div>
+  <div class="secure-login-modal" id="secure-signup-modal" aria-hidden="true">
+    <button class="secure-login-backdrop" type="button" data-signup-close aria-label="Close signup"></button>
+    <section class="secure-login-card" role="dialog" aria-modal="true" aria-labelledby="secure-signup-title">
+      <button class="secure-login-close" type="button" data-signup-close aria-label="Close">&times;</button>
+      <div class="secure-login-logo" aria-hidden="true">&#128737;</div>
+      <div class="secure-login-kicker">Mybanno Secure Access</div>
+      <h1 id="secure-signup-title">Create account</h1>
+      <p class="secure-login-intro">Join Mybanno and keep track of your orders.</p>
+      <form method="post" action="{% url 'customer_signup' %}" data-secure-signup-form>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="secure-signup-name-row">
+          <div>
+            <label for="signup-first-name">First name</label>
+            <input id="signup-first-name" name="first_name" required autocomplete="given-name">
+          </div>
+          <div>
+            <label for="signup-last-name">Last name</label>
+            <input id="signup-last-name" name="last_name" required autocomplete="family-name">
+          </div>
+        </div>
+        <label for="signup-email">Email <span class="field-optional">(optional)</span></label>
+        <input id="signup-email" name="email" type="email" autocomplete="email">
+        <label for="signup-mobile">Mobile number</label>
+        <input id="signup-mobile" name="mobile_number" required inputmode="numeric" minlength="10" maxlength="10" autocomplete="tel">
+        <label for="signup-password">Password</label>
+        <div class="secure-password-wrap">
+          <input id="signup-password" name="password" type="password" required minlength="8" autocomplete="new-password">
+          <button type="button" data-signup-password-toggle aria-label="Show password">Show</button>
+        </div>
+        <label for="signup-confirm-password">Confirm password</label>
+        <input id="signup-confirm-password" name="confirm_password" type="password" required autocomplete="new-password">
+        <div class="secure-question-row">
+          <div>
+            <strong>Quick security check</strong>
+            <span class="secure-question" data-signup-security-question>{{ security_question }}</span>
+          </div>
+          <div class="secure-answer-wrap">
+            <button type="button" data-signup-new-question>New question</button>
+            <input name="security_answer" required inputmode="numeric" autocomplete="off" aria-label="Security answer" placeholder="Your answer">
+          </div>
+        </div>
+        <p class="secure-login-error" data-secure-signup-error hidden></p>
+        <button class="secure-login-submit" type="submit">Create account <span>&rarr;</span></button>
+      </form>
+      <p class="secure-login-switch">Already have an account? <a href="{% url 'customer_login' %}?next={{ request.path|urlencode }}" data-login-modal>Login</a></p>
+      <p class="secure-login-protected">Your account details are protected and encrypted.</p>
+    </section>
+  </div>
+  {% endif %}
   <main>
     {% if messages %}<div class="container flash-stack">{% for message in messages %}<div class="flash {% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>{% endfor %}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer><div class="container"><span>Thoughtfully made, comfortably worn. &copy; {{ 2026 }} Mybanno.</span><span class="footer-credit">Website by <a href="https://intellicatechnology.com/" target="_blank" rel="noopener noreferrer">Intellica Technology</a></span></div></footer>
+  <script>
+    (() => {
+      const modal = document.getElementById("secure-login-modal");
+      if (!modal) return;
+      const form = modal.querySelector("[data-secure-login-form]");
+      const error = modal.querySelector("[data-secure-login-error]");
+      const signupModal = document.getElementById("secure-signup-modal");
+      const signupForm = signupModal.querySelector("[data-secure-signup-form]");
+      const signupError = signupModal.querySelector("[data-secure-signup-error]");
+
+      const openModal = (nextUrl) => {
+        modal.classList.add("is-open");
+        modal.style.display = "grid";
+        modal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("login-modal-open");
+        if (nextUrl) {
+          const nextInput = modal.querySelector('input[name="next"]');
+          if (nextInput) nextInput.value = nextUrl;
+        }
+        setTimeout(() => modal.querySelector("#secure-login-username").focus(), 50);
+      };
+      const closeModal = () => {
+        modal.classList.remove("is-open");
+        modal.style.display = "none";
+        modal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("login-modal-open");
+        if (new URLSearchParams(window.location.search).get("login") === "1") {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("login");
+          cleanUrl.searchParams.delete("next");
+          window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+        }
+      };
+      const openSignupModal = () => {
+        modal.classList.remove("is-open");
+        modal.style.display = "none";
+        modal.setAttribute("aria-hidden", "true");
+        signupModal.classList.add("is-open");
+        signupModal.style.display = "grid";
+        signupModal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("login-modal-open");
+        setTimeout(() => signupModal.querySelector("#signup-first-name").focus(), 50);
+      };
+      const closeSignupModal = () => {
+        signupModal.classList.remove("is-open");
+        signupModal.style.display = "none";
+        signupModal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("login-modal-open");
+        if (new URLSearchParams(window.location.search).get("signup") === "1") {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("signup");
+          cleanUrl.searchParams.delete("next");
+          window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+        }
+      };
+
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("login") === "1") {
+        const nextInput = form.querySelector('input[name="next"]');
+        if (urlParams.get("next")) nextInput.value = urlParams.get("next");
+        openModal();
+      }
+      if (urlParams.get("signup") === "1") {
+        const nextInput = signupForm.querySelector('input[name="next"]');
+        if (urlParams.get("next")) nextInput.value = urlParams.get("next");
+        openSignupModal();
+      }
+
+      document.querySelectorAll("[data-login-modal]").forEach(link => {
+        link.addEventListener("click", event => {
+          event.preventDefault();
+          closeSignupModal();
+          const nextUrl = new URL(link.href, window.location.origin).searchParams.get("next") || "";
+          openModal(nextUrl);
+        });
+      });
+      document.querySelectorAll("[data-signup-modal]").forEach(link => {
+        link.addEventListener("click", event => {
+          event.preventDefault();
+          openSignupModal();
+        });
+      });
+      modal.querySelectorAll("[data-login-close]").forEach(button => button.addEventListener("click", closeModal));
+      signupModal.querySelectorAll("[data-signup-close]").forEach(button => button.addEventListener("click", closeSignupModal));
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+          closeModal();
+          closeSignupModal();
+        }
+      });
+
+      modal.querySelector("[data-password-toggle]").addEventListener("click", event => {
+        const password = modal.querySelector("#secure-login-password");
+        const showing = password.type === "text";
+        password.type = showing ? "password" : "text";
+        event.currentTarget.textContent = showing ? "Show" : "Hide";
+      });
+      signupModal.querySelector("[data-signup-password-toggle]").addEventListener("click", event => {
+        const password = signupModal.querySelector("#signup-password");
+        const showing = password.type === "text";
+        password.type = showing ? "password" : "text";
+        event.currentTarget.textContent = showing ? "Show" : "Hide";
+      });
+      signupModal.querySelector("[data-signup-new-question]").addEventListener("click", async () => {
+        const response = await fetch("{% url 'customer_security_question' %}", {headers: {"X-Requested-With": "XMLHttpRequest"}});
+        if (response.ok) {
+          const data = await response.json();
+          signupModal.querySelector("[data-signup-security-question]").textContent = data.question;
+          signupForm.elements.security_answer.value = "";
+        }
+      });
+
+      modal.querySelector("[data-new-question]").addEventListener("click", async () => {
+        const response = await fetch("{% url 'customer_security_question' %}", {headers: {"X-Requested-With": "XMLHttpRequest"}});
+        if (response.ok) {
+          const data = await response.json();
+          modal.querySelector("[data-security-question]").textContent = data.question;
+          form.elements.security_answer.value = "";
+        }
+      });
+
+      signupForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        signupError.hidden = true;
+        const response = await fetch(signupForm.action, {
+          method: "POST",
+          body: new FormData(signupForm),
+          headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          window.location.href = data.redirect;
+          return;
+        }
+        let message = data.error || "Could not create account. Please try again.";
+        if (data.errors) {
+          const fieldLabels = {
+            first_name: "First name",
+            last_name: "Last name",
+            email: "Email",
+            mobile_number: "Mobile number",
+            password: "Password",
+            confirm_password: "Confirm password",
+          };
+          const details = Object.entries(data.errors).map(([field, messages]) =>
+            `${fieldLabels[field] || field}: ${messages.join(" ")}`
+          );
+          if (details.length) message = details.join(" | ");
+        }
+        signupError.textContent = message;
+        signupError.hidden = false;
+        const questionResponse = await fetch("{% url 'customer_security_question' %}");
+        if (questionResponse.ok) {
+          const questionData = await questionResponse.json();
+          signupModal.querySelector("[data-signup-security-question]").textContent = questionData.question;
+        }
+        signupForm.elements.security_answer.value = "";
+      });
+
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        error.hidden = true;
+        const response = await fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          window.location.href = data.redirect;
+          return;
+        }
+        error.textContent = data.error || "Login failed. Please try again.";
+        error.hidden = false;
+        const questionResponse = await fetch("{% url 'customer_security_question' %}");
+        if (questionResponse.ok) {
+          const questionData = await questionResponse.json();
+          modal.querySelector("[data-security-question]").textContent = questionData.question;
+        }
+        form.elements.security_answer.value = "";
+      });
+    })();
+  </script>
 </body>
 </html>

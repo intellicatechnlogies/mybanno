@@ -15,7 +15,7 @@ CREDENTIAL_ENCRYPTION_KEY = os.environ.get(
     "CREDENTIAL_ENCRYPTION_KEY",
     base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest()).decode(),
 )
-DEBUG = False
+DEBUG = os.environ.get("DJANGO_DEBUG", "").lower() in ("1", "true", "yes")
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [

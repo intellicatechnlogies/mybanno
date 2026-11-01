@@ -1,7 +1,9 @@
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.hashers import check_password, make_password
 from decimal import Decimal
 import re
+import uuid
 from .s3_media import display_media_url, thumbnail_media_url
 from .credential_crypto import decrypt_credential_value, encrypt_credential_value
 
@@ -213,6 +215,11 @@ class ProductMedia(models.Model):
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
 
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = "MB-" + uuid.uuid4().hex[:12].upper()
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["sort_order", "id"]
         indexes = [
@@ -264,18 +271,50 @@ class Credential(models.Model):
         return f"{self.service}: {self.account or self.credential_type or 'credential'}"
 
 
+class Customer(models.Model):
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    email = models.EmailField(max_length=254, blank=True, default="")
+    mobile_number = models.CharField(max_length=10, unique=True)
+    password_hash = models.CharField(max_length=512)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    def set_password(self, raw_password):
+        self.password_hash = make_password(raw_password)
+
+    def check_password(self, raw_password):
+        return check_password(raw_password, self.password_hash)
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+
 class ShopOrder(models.Model):
     class Status(models.TextChoices):
         IN_PROGRESS = "in_progress", "In progress"
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
+    order_number = models.CharField(max_length=32, unique=True, editable=False)
+    customer = models.ForeignKey(
+        Customer,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+    )
     mobile_number = models.CharField(max_length=24)
     delivery_address = models.TextField(max_length=1000)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_PROGRESS, db_index=True)
     remarks = models.TextField(max_length=2000, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = "MB-" + uuid.uuid4().hex[:12].upper()
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["created_at", "pk"]
@@ -305,6 +344,23 @@ class ShopOrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name} × {self.quantity}"
+
+
+class CustomerCartItem(models.Model):
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="cart_items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    color = models.CharField(max_length=100, blank=True, default="")
+    color_code = models.CharField(max_length=7, blank=True, default="")
+    size = models.CharField(max_length=100, blank=True, default="")
+    quantity = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("customer", "product", "color", "size")
 
 
 class AdminAccount(models.Model):

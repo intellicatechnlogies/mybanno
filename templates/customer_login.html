@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login · Mybanno{% endblock %}
+{% block content %}
+<div class="container account-page secure-login-page">
+  <section class="account-card secure-login-card secure-login-inline">
+    <div class="secure-login-logo" aria-hidden="true">&#128737;</div>
+    <div class="secure-login-kicker">Mybanno Secure Access</div>
+    <h1 id="secure-login-title">Welcome back</h1>
+    <p class="secure-login-intro">Sign in to continue to your Mybanno account.</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+      {{ form.as_p }}
+      {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="secure-question-row">
+        <div><strong>Quick security check</strong><span class="secure-question">{{ security_question }}</span></div>
+        <div class="secure-answer-wrap"><a href="{{ request.path }}">New question</a></div>
+      </div>
+      <button class="secure-login-submit" type="submit">Sign in securely <span>&rarr;</span></button>
+    </form>
+    <p class="secure-login-switch">Don't have an account? <a href="{% url 'customer_signup' %}?next={{ request.GET.next|urlencode }}">Sign up</a></p>
+    <p class="secure-login-protected">Your sign-in is protected and encrypted.</p>
+  </section>
+</div>
+{% endblock %}

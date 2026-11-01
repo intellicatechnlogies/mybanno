@@ -283,7 +283,6 @@
     grid.addEventListener('click', (event) => {
       const cardButton = event.target.closest('.product-card-link, .product-card-add');
       if (!cardButton) return;
-      const isAddButton = cardButton.classList.contains('product-card-add');
       modal.showModal();
       document.body.classList.add('product-modal-open');
       const activeRequest = ++requestId;
@@ -310,12 +309,6 @@
           if (activeRequest !== requestId || !modal.open) return;
           status.textContent = '';
           updateProduct(product);
-          if (isAddButton && product.colors.length <= 1 && product.sizes.length <= 1) {
-            const sizeSelect = modal.querySelector('.product-modal-size');
-            sizeSelect.value = product.sizes[0] || '';
-            syncSelectedSize();
-            modal.querySelector('.product-modal-cart-form').requestSubmit();
-          }
         })
         .catch(() => {
           if (activeRequest !== requestId || !modal.open) return;

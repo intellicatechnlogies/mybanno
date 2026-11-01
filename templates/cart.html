@@ -41,7 +41,11 @@
         <h2>Order summary</h2>
         <p><span>Subtotal</span><strong>{{ subtotal|floatformat:2 }}</strong></p>
         <p class="count">Payment is not collected online at checkout.</p>
-        <a class="button cart-checkout-button" href="{% url 'checkout' %}">Checkout</a>
+        {% if request.session.customer_id %}
+          <a class="button cart-checkout-button" href="{% url 'checkout' %}">Checkout</a>
+        {% else %}
+          <a class="button cart-checkout-button" href="{% url 'customer_login' %}?next=/checkout/" data-login-modal>Checkout</a>
+        {% endif %}
         <a class="button" href="{% url 'index' %}#collection">Continue shopping</a>
       </aside>
     </div>
