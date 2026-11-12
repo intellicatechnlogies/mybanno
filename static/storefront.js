@@ -149,21 +149,24 @@
       submitButton.disabled = available < 1
         || (activeProduct.colors.length > 1 && !selectedColor)
         || (activeProduct.sizes.length > 0 && !selectedSize);
+      const stockMessage = available > 0
+        ? `${available} in stock`
+        : 'Out of stock';
       modal.querySelector('.product-modal-stock').textContent = activeProduct.colors.length
         ? activeProduct.colors.length > 1
           ? (selectedColor && selectedSize
-            ? `${available} in stock for ${selectedColor}, size ${selectedSize}`
+            ? `${stockMessage} for ${selectedColor}, size ${selectedSize}`
             : selectedSize
-              ? `Please select a color · ${available} in stock for size ${selectedSize}`
-              : `Choose a color and size · ${activeProduct.stock} in stock`)
+              ? `Please select a color · ${stockMessage} for size ${selectedSize}`
+              : `Choose a color and size · ${activeProduct.stock > 0 ? `${activeProduct.stock} in stock` : 'Out of stock'}`)
           : selectedSize
-            ? `${available} in stock for ${activeProduct.colors[0].name}, size ${selectedSize}`
-            : `Choose a size · ${activeProduct.stock} in stock for ${activeProduct.colors[0].name}`
+            ? `${stockMessage} for ${activeProduct.colors[0].name}, size ${selectedSize}`
+            : `Choose a size · ${activeProduct.stock > 0 ? `${activeProduct.stock} in stock` : 'Out of stock'} for ${activeProduct.colors[0].name}`
         : activeProduct.sizes.length
           ? (selectedSize
-            ? `${available} in stock for size ${selectedSize}`
-            : `${activeProduct.stock} in stock across all sizes`)
-        : (available > 0 ? `${available} in stock` : 'Sold out');
+            ? `${stockMessage} for size ${selectedSize}`
+            : `${activeProduct.stock > 0 ? `${activeProduct.stock} in stock` : 'Out of stock'} across all sizes`)
+        : stockMessage;
     };
 
     const populateSizeOptions = () => {
@@ -185,8 +188,7 @@
             ? Number(activeProduct.color_stock[selectedColor]?.[size] || 0)
             : Number(activeProduct.size_stock[size] || 0)
           : Number(activeProduct.size_stock[size] || 0);
-        option.textContent = `${size} · ${available} in stock`;
-        option.disabled = available < 1;
+        option.textContent = `${size} · ${available > 0 ? `${available} in stock` : 'Out of stock'}`;
         sizeSelect.append(option);
       });
       if (previousSize && Array.from(sizeSelect.options).some(
