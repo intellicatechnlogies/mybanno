@@ -292,6 +292,55 @@ class StorefrontTests(TestCase):
         self.assertEqual(modal_response.json()["discount_percentage"], 25)
         self.assertEqual(modal_response.json()["size_stock"], {"S": 2, "M": 1})
 
+    def test_out_of_stock_products_and_sizes_remain_visible(self):
+        self.first_product.sizes = "M, L"
+        self.first_product.size_stock = {"M": 1, "L": 0}
+        self.first_product.stock = 1
+        self.first_product.save(update_fields=["sizes", "size_stock", "stock"])
+
+        catalog = self.client.get(reverse("index"))
+        self.assertContains(catalog, "Linen Shirt")
+        self.assertContains(catalog, "L · Out of stock")
+        self.assertContains(catalog, "Cotton Dress")
+        self.assertContains(
+            catalog,
+            f'aria-label="Add Cotton Dress to cart" disabled>Out of stock</button>',
+        )
+
+        detail = self.client.get(
+            reverse("product_detail", args=[self.first_product.pk])
+        )
+        self.assertContains(detail, "L · Out of stock")
+        out_of_stock_product = Product.objects.get(name="Cotton Dress")
+        out_of_stock_detail = self.client.get(
+            reverse("product_detail", args=[out_of_stock_product.pk])
+        )
+        self.assertContains(out_of_stock_detail, "Out of stock")
+
+        modal = self.client.get(
+            reverse(
+                "product_modal_data",
+                args=[out_of_stock_product.pk],
+            )
+        ).json()
+        self.assertEqual(modal["stock"], 0)
+        self.assertEqual(modal["size_stock"], {})
+
+        unavailable_size = self.client.post(
+            reverse("cart_add"),
+            {"product_id": self.first_product.pk, "size": "L", "quantity": "1"},
+        )
+        self.assertEqual(unavailable_size.status_code, 400)
+        out_of_stock_add = self.client.post(
+            reverse("cart_add"),
+            {
+                "product_id": out_of_stock_product.pk,
+                "size": "Free Size",
+                "quantity": "1",
+            },
+        )
+        self.assertEqual(out_of_stock_add.status_code, 400)
+
     def test_size_inventory_limits_cart_and_decrements_selected_sizes(self):
         self.first_product.size_stock = {"S": 1, "M": 2}
         self.first_product.stock = 3
@@ -339,7 +388,7 @@ class StorefrontTests(TestCase):
         homepage = self.client.get(reverse("index"), {"q": "Linen"})
         self.assertContains(homepage, "2 in stock")
         self.assertContains(homepage, "S · 2")
-        self.assertContains(homepage, "M · 0")
+        self.assertContains(homepage, "M · Out of stock")
 
         modal = self.client.get(
             reverse("product_modal_data", args=[self.first_product.pk])
